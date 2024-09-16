@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>主页</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: center;
+        }
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .actions a {
+            margin: 0 5px;
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+        .actions a:hover {
+            text-decoration: underline;
+        }
+        .buttons {
+            text-align: center;
+            margin: 20px;
+        }
+        .buttons a {
+            margin: 0 10px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .buttons a:hover {
+            background-color: #45a049;
+        }
+        .flash-message {
+            max-width: 500px;
+            margin: 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>欢迎, {{ username }}</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-message">
+          <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <h2>你的群组:</h2>
+    <table>
+        <tr>
+            <th>群号</th>
+            <th>群名</th>
+            <th>操作</th>
+        </tr>
+        {% for group in groups %}
+            <tr>
+                <td>{{ group[0] }}</td>
+                <td>{{ group[1] }}</td>
+                <td class="actions">
+                    <a href="{{ url_for('chat', group_id=group[0]) }}">进入群聊</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+
+    <div class="buttons">
+        <a href="{{ url_for('create_group') }}">创建群组</a>
+        <a href="{{ url_for('join_group') }}">加入群组</a>
+        {% if session.is_admin %}
+            <a href="{{ url_for('admin') }}">管理员界面</a>
+            <a href="{{ url_for('server_status') }}">服务器状态</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}">退出</a>
+    </div>
+</body>
+</html>

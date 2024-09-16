@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>服务器状态</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        table {
+            width: 60%;
+            margin: 20px auto 40px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .flash-message {
+            width: 60%;
+            margin: 0 auto 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>服务器状态</h1>
+
+    <!-- 显示 Flash 消息（如果有） -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-message">
+          <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- 服务器状态表格 -->
+    <table>
+        <tr>
+            <th>项目</th>
+            <th>状态</th>
+        </tr>
+        <tr>
+            <td>运行时间</td>
+            <td>{{ uptime }}</td>
+        </tr>
+        <tr>
+            <td>内存使用</td>
+            <td>{{ memory }} MB</td>
+        </tr>
+        <tr>
+            <td>CPU 使用率</td>
+            <td>{{ cpu_usage }}%</td>
+        </tr>
+        <tr>
+            <td>磁盘空间</td>
+            <td>{{ disk_space }} GB</td>
+        </tr>
+    </table>
+
+    <!-- 返回管理员页面的链接 -->
+    <div class="back-link">
+        <a href="{{ url_for('admin') }}">返回管理员页面</a>
+    </div>
+</body>
+</html>

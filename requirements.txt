@@ -1,0 +1,7 @@
+Flask
+Flask-SocketIO
+eventlet
+markupsafe
+Werkzeug
+Flask-WTF
+psutil

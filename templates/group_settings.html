@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>管理员面板</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h2,
+        h3 {
+            color: #333;
+            text-align: center;
+        }
+
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        select,
+        input[type="text"],
+        input[type="number"] {
+            width: 90%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .flash-message {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        form {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h2> {{ group_id }} 群管理员面板</h2>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- 添加成员到群组 -->
+    <h3>添加成员到群组</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="add_member">
+        <table>
+            <tr>
+                <th>选择用户</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for user in users %}
+                        <option value="{{ user[0] }}">{{ user[0] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">添加成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 从群组移除成员 -->
+    <h3>从群组移除成员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="remove_member">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members %}
+                        <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">移除成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+    <!-- 从群组移除成员并加入黑名单 -->
+    <h3>从群组移除成员并加入黑名单</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="insertblacklist">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members %}
+                        <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">移除成员并加入黑名单</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 提升管理员 -->
+    <h3>提升管理员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="promote_admin">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members if member[2] == 'member' %}
+                        <option value="{{ member[1] }}">{{ member[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">提升为管理员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 降级管理员 -->
+    <h3>降级管理员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="demote_admin">
+        <table>
+            <tr>
+                <th>选择管理员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members if member[2] == 'admin' %}
+                        <option value="{{ member[1] }}">{{ member[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">降级为成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+</body>
+
+</html>

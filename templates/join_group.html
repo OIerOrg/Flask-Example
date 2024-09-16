@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>加入群组</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        form {
+            max-width: 400px;
+            margin: auto;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #007B9E;
+        }
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">加入群组</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-message">
+          <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('join_group') }}" method="POST">
+        <label for="group_id">群号：</label>
+        <input type="number" id="group_id" name="group_id" placeholder="输入群号" required>
+
+        <button type="submit">加入</button>
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+</body>
+</html>

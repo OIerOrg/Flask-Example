@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>登录</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #007BB5;
+        }
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+        }
+        .center {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="center">登录</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-message">
+          <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('login') }}" method="POST">
+        <label for="username">用户名：</label>
+        <input type="text" id="username" name="username" placeholder="请输入用户名" required>
+
+        <label for="password">密码：</label>
+        <input type="password" id="password" name="password" placeholder="请输入密码" required>
+
+        <button type="submit">登录</button>
+    </form>
+    <p class="center">没有账号？<a href="{{ url_for('register') }}">注册</a></p>
+</body>
+</html>
