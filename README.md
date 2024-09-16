@@ -28,3 +28,14 @@
 用户可以通过输入群组编号加入已创建的群组，与其他成员进行聊天互动。
 ![加入群组](./pic/加入群组.png)
 
+## 使用方法
+```bash
+git clone https://github.com/zjx-kimi/Chat.git
+cd Chat
+python3 -m venv venv           
+cd venv               
+source bin/activate
+cd ..    
+pip install -r requirements.txt
+python app.py
+```
