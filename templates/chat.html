@@ -1,19 +1,63 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>群聊 - 群号: {{ group_id }}</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f4f4f9;
+            margin: 0;
         }
-        h2, h3 {
+
+        h2,
+        h3 {
             text-align: center;
             color: #333;
         }
+
         #messages {
             border: 1px solid #ccc;
             height: 400px;
@@ -26,9 +70,11 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
+
         #messages p {
             margin: 5px 0;
         }
+
         #loadMoreBtn {
             display: block;
             width: 80%;
@@ -41,15 +87,18 @@
             border-radius: 5px;
             font-size: 16px;
         }
+
         #loadMoreBtn:hover {
             background-color: #0056b3;
         }
+
         #messageForm {
             display: flex;
             justify-content: center;
             width: 80%;
             margin: auto;
         }
+
         #messageForm input[type="text"] {
             flex: 1;
             padding: 10px;
@@ -59,6 +108,7 @@
             outline: none;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
+
         #messageForm input[type="submit"] {
             padding: 10px 20px;
             font-size: 16px;
@@ -68,9 +118,11 @@
             cursor: pointer;
             border-radius: 0 5px 5px 0;
         }
+
         #messageForm input[type="submit"]:hover {
             background-color: #218838;
         }
+
         .flash-message {
             max-width: 80%;
             margin: 20px auto;
@@ -82,18 +134,22 @@
             text-align: center;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
+
         .back-link {
             text-align: center;
             margin: 20px;
         }
+
         .back-link a {
             text-decoration: none;
             color: #007BFF;
             font-weight: bold;
         }
+
         .back-link a:hover {
             text-decoration: underline;
         }
+
         .setting-btn {
             display: block;
             width: 80%;
@@ -106,31 +162,48 @@
             border-radius: 5px;
             font-size: 16px;
         }
+
         .setting-btn:hover {
             background-color: #e0a800;
         }
     </style>
 </head>
+
 <body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="https://zjx-kimi.github.io/GraphEditorEN/github-mark/github-mark.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
     <h2>群聊 - 群号: {{ group_id }}</h2>
     {% if group_name %}
-        <h3>群名: {{ group_name }}</h3>
+    <h3>群名: {{ group_name }}</h3>
     {% endif %}
-    
-    {% if canedit %} 
-    <button class="setting-btn" onclick="window.location.href='{{ url_for('group_settings', group_id=group_id) }}'">Go to Setting</button>
+
+    {% if canedit %}
+    <button class="setting-btn" onclick="window.location.href='{{ url_for('group_settings', group_id=group_id) }}'">Go
+        to Setting</button>
     {% endif %}
-    
+
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-message">
-          <ul>
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
             {% for message in messages %}
-              <li>{{ message }}</li>
+            <li>{{ message }}</li>
             {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
+        </ul>
+    </div>
+    {% endif %}
     {% endwith %}
 
     <button id="loadMoreBtn">加载更多</button>
@@ -148,62 +221,69 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             var socket = io();
-            var group_id = {{ group_id }};
-            var messageOffset = 10;  // 已加载的消息数量
+            var group_id = {{ group_id }
+        };
+        var messageOffset = 10;  // 已加载的消息数量
 
-            socket.emit('join', {'group_id': group_id});
+        socket.emit('join', { 'group_id': group_id });
 
-            socket.on('loaded_messages', function(data) {
-                var messages = document.getElementById('messages');
-                var p = document.createElement('p');
-                p.innerHTML = '已加载 ' + data.count + ' 条消息';
-                p.style.textAlign = 'center';
-                p.style.color = '#888';
-                messages.insertBefore(p, messages.firstChild);
-                if (data.count < 10) {
-                    document.getElementById('loadMoreBtn').style.display = 'none';
-                }
-            });
+        socket.on('loaded_messages', function (data) {
+            var messages = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.innerHTML = '已加载 ' + data.count + ' 条消息';
+            p.style.textAlign = 'center';
+            p.style.color = '#888';
+            messages.insertBefore(p, messages.firstChild);
+            if (data.count < 10) {
+                document.getElementById('loadMoreBtn').style.display = 'none';
+            }
+        });
 
-            socket.on('previous_message', function(data) {
-                var messages = document.getElementById('messages');
-                var p = document.createElement('p');
-                p.innerHTML = data.msg;
-                messages.insertBefore(p, messages.firstChild);
-            });
+        socket.on('previous_message', function (data) {
+            var messages = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.innerHTML = data.msg;
+            messages.insertBefore(p, messages.firstChild);
+        });
 
-            socket.on('loaded_more_messages', function(data) {
-                messageOffset += data.count;
-                if (data.count < 10) {
-                    document.getElementById('loadMoreBtn').style.display = 'none';
-                }
-            });
+        socket.on('loaded_more_messages', function (data) {
+            messageOffset += data.count;
+            if (data.count < 10) {
+                document.getElementById('loadMoreBtn').style.display = 'none';
+            }
+        });
 
-            socket.on('message', function(data) {
-                var messages = document.getElementById('messages');
-                var p = document.createElement('p');
-                p.innerHTML = data.msg;
-                messages.appendChild(p);
-                messages.scrollTop = messages.scrollHeight;
-            });
+        socket.on('message', function (data) {
+            var messages = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.innerHTML = data.msg;
+            messages.appendChild(p);
+            messages.scrollTop = messages.scrollHeight;
+        });
 
-            document.getElementById('messageForm').onsubmit = function(e) {
-                e.preventDefault();
-                var msg = document.getElementById('message').value.trim();
-                if (msg !== "") {
-                    socket.emit('message', {'group_id': group_id, 'msg': msg});
-                    document.getElementById('message').value = '';
-                }
-            };
+        document.getElementById('messageForm').onsubmit = function (e) {
+            e.preventDefault();
+            var msg = document.getElementById('message').value.trim();
+            if (msg !== "") {
+                socket.emit('message', { 'group_id': group_id, 'msg': msg });
+                document.getElementById('message').value = '';
+            }
+        };
 
-            document.getElementById('loadMoreBtn').onclick = function() {
-                socket.emit('load_more_messages', {'group_id': group_id, 'offset': messageOffset});
-            };
+        document.getElementById('loadMoreBtn').onclick = function () {
+            socket.emit('load_more_messages', { 'group_id': group_id, 'offset': messageOffset });
+        };
 
-            window.onbeforeunload = function() {
-                socket.emit('leave', {'group_id': group_id});
-            };
+        window.onbeforeunload = function () {
+            socket.emit('leave', { 'group_id': group_id });
+        };
         });
     </script>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
+
 </html>

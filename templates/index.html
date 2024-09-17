@@ -1,48 +1,101 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>主页</title>
     <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
         }
-        h1, h2 {
+
+        h1,
+        h2 {
             text-align: center;
             color: #333;
         }
+
         table {
             width: 80%;
             margin: 20px auto;
             border-collapse: collapse;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
-        th, td {
+
+        th,
+        td {
             border: 1px solid #ddd;
             padding: 12px 15px;
             text-align: center;
         }
+
         th {
             background-color: #f4f4f4;
             color: #333;
         }
+
         tr:nth-child(even) {
             background-color: #fafafa;
         }
+
         .actions a {
             margin: 0 5px;
             text-decoration: none;
             color: #007BFF;
             font-weight: bold;
         }
+
         .actions a:hover {
             text-decoration: underline;
         }
+
         .buttons {
             text-align: center;
             margin: 20px;
         }
+
         .buttons a {
             margin: 0 10px;
             padding: 10px 20px;
@@ -51,9 +104,11 @@
             text-decoration: none;
             border-radius: 5px;
         }
+
         .buttons a:hover {
             background-color: #45a049;
         }
+
         .flash-message {
             max-width: 500px;
             margin: 20px auto;
@@ -66,20 +121,35 @@
         }
     </style>
 </head>
+
 <body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="https://zjx-kimi.github.io/GraphEditorEN/github-mark/github-mark.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
     <h1>欢迎, {{ username }}</h1>
 
     <!-- 显示 Flash 消息 -->
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-message">
-          <ul>
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
             {% for message in messages %}
-              <li>{{ message }}</li>
+            <li>{{ message }}</li>
             {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
+        </ul>
+    </div>
+    {% endif %}
     {% endwith %}
 
     <h2>你的群组:</h2>
@@ -90,13 +160,13 @@
             <th>操作</th>
         </tr>
         {% for group in groups %}
-            <tr>
-                <td>{{ group[0] }}</td>
-                <td>{{ group[1] }}</td>
-                <td class="actions">
-                    <a href="{{ url_for('chat', group_id=group[0]) }}">进入群聊</a>
-                </td>
-            </tr>
+        <tr>
+            <td>{{ group[0] }}</td>
+            <td>{{ group[1] }}</td>
+            <td class="actions">
+                <a href="{{ url_for('chat', group_id=group[0]) }}">进入群聊</a>
+            </td>
+        </tr>
         {% endfor %}
     </table>
 
@@ -104,10 +174,16 @@
         <a href="{{ url_for('create_group') }}">创建群组</a>
         <a href="{{ url_for('join_group') }}">加入群组</a>
         {% if session.is_admin %}
-            <a href="{{ url_for('admin') }}">管理员界面</a>
-            <a href="{{ url_for('server_status') }}">服务器状态</a>
+        <a href="{{ url_for('admin') }}">管理员界面</a>
+        <a href="{{ url_for('server_status') }}">服务器状态</a>
         {% endif %}
         <a href="{{ url_for('logout') }}">退出</a>
     </div>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
+
 </html>

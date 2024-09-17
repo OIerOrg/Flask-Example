@@ -1,23 +1,68 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>创建群组</title>
     <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            margin: 50px;
+            margin: 0;
         }
+
         form {
             max-width: 400px;
             margin: auto;
         }
+
         input[type="text"] {
             width: 100%;
             padding: 12px;
             margin: 8px 0;
             box-sizing: border-box;
         }
+
         button {
             width: 100%;
             padding: 12px;
@@ -26,9 +71,11 @@
             border: none;
             cursor: pointer;
         }
+
         button:hover {
             background-color: #45a049;
         }
+
         .flash-message {
             max-width: 400px;
             margin: 20px auto;
@@ -39,34 +86,52 @@
             border-radius: 5px;
             text-align: center;
         }
+
         .back-link {
             text-align: center;
             margin-top: 20px;
         }
+
         .back-link a {
             text-decoration: none;
             color: #007BFF;
             font-weight: bold;
         }
+
         .back-link a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
+
 <body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="https://zjx-kimi.github.io/GraphEditorEN/github-mark/github-mark.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
     <h1 style="text-align:center;">创建群组</h1>
 
     <!-- 显示 Flash 消息 -->
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-message">
-          <ul>
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
             {% for message in messages %}
-              <li>{{ message }}</li>
+            <li>{{ message }}</li>
             {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
+        </ul>
+    </div>
+    {% endif %}
     {% endwith %}
 
     <form action="{{ url_for('create_group') }}" method="POST">
@@ -79,5 +144,11 @@
     <div class="back-link">
         <a href="{{ url_for('index') }}">返回主页</a>
     </div>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
+
 </html>

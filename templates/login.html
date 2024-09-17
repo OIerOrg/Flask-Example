@@ -1,23 +1,69 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>登录</title>
     <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            margin: 50px;
+            margin: 0;
         }
+
         form {
             max-width: 400px;
             margin: 0 auto;
         }
-        input[type="text"], input[type="password"] {
+
+        input[type="text"],
+        input[type="password"] {
             width: 100%;
             padding: 12px;
             margin: 8px 0;
             box-sizing: border-box;
         }
+
         button {
             width: 100%;
             padding: 12px;
@@ -26,9 +72,11 @@
             border: none;
             cursor: pointer;
         }
+
         button:hover {
             background-color: #007BB5;
         }
+
         .flash-message {
             max-width: 400px;
             margin: 20px auto;
@@ -38,25 +86,40 @@
             border: 1px solid #f5c6cb;
             border-radius: 5px;
         }
+
         .center {
             text-align: center;
         }
     </style>
 </head>
-<body>
+
+<body><header>
+    <nav class="navbar">
+        <div class="container">
+            <!-- GitHub链接和其他导航链接居中 -->
+            <div class="nav-links">
+                <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                    <img width="18" src="https://zjx-kimi.github.io/GraphEditorEN/github-mark/github-mark.svg"
+                        alt="Github Logo">
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+    </header>
     <h1 class="center">登录</h1>
 
     <!-- 显示 Flash 消息 -->
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-message">
-          <ul>
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
             {% for message in messages %}
-              <li>{{ message }}</li>
+            <li>{{ message }}</li>
             {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
+        </ul>
+    </div>
+    {% endif %}
     {% endwith %}
 
     <form action="{{ url_for('login') }}" method="POST">
@@ -68,6 +131,11 @@
 
         <button type="submit">登录</button>
     </form>
-    <p class="center">没有账号？<a href="{{ url_for('register') }}">注册</a></p>
+    <p class="center">没有账号？<a href="{{ url_for('register') }}">注册</a></p><footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
+
 </html>
