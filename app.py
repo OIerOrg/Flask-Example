@@ -60,6 +60,57 @@ def init_db():
 with app.app_context():
     init_db()
 
+# 用户密码修改路由
+@app.route('/change_password', methods=['GET', 'POST'])
+def change_password():
+    if 'username' not in session:
+        flash("请先登录", "warning")
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        if not current_password or not new_password or not confirm_password:
+            flash('所有字段都必须填写', 'danger')
+            return redirect(url_for('change_password'))
+
+        username = session['username']
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT password FROM users WHERE username=?", (username,))
+        user = c.fetchone()
+
+        if user:
+            stored_password = user[0]
+            if not check_password_hash(stored_password, current_password):
+                flash('当前密码不正确', 'danger')
+                conn.close()
+                return redirect(url_for('change_password'))
+
+            if new_password != confirm_password:
+                flash('新密码和确认密码不匹配', 'danger')
+                conn.close()
+                return redirect(url_for('change_password'))
+
+            # 更新密码
+            hashed_new_password = generate_password_hash(new_password)
+            c.execute("UPDATE users SET password=? WHERE username=?", (hashed_new_password, username))
+            conn.commit()
+            conn.close()
+
+            flash('密码修改成功', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('用户不存在', 'danger')
+            conn.close()
+            return redirect(url_for('change_password'))
+
+    return render_template('change_password.html')
+
+
 # 用户注册路由
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -659,4 +710,4 @@ def handle_leave(data):
 
 # 运行应用
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
