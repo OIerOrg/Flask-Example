@@ -176,8 +176,7 @@
                 <!-- GitHub链接和其他导航链接居中 -->
                 <div class="nav-links">
                     <a href="https://github.com/zjx-kimi/Chat" class="github-link">
-                        <img width="18" src="static/images/github.svg"
-                            alt="Github Logo">
+                        <img width="18" src="/static/images/github.svg" alt="Github Logo">
                         GitHub
                     </a>
                 </div>
@@ -221,62 +220,62 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             var socket = io();
-            var group_id = {{ group_id }
-        };
-        var messageOffset = 10;  // 已加载的消息数量
+            var group_id = {{ group_id }}; // Ensure group_id is a number. If it's a string, use quotes: "{{ group_id }}"
 
-        socket.emit('join', { 'group_id': group_id });
+            var messageOffset = 10;  // 已加载的消息数量
 
-        socket.on('loaded_messages', function (data) {
-            var messages = document.getElementById('messages');
-            var p = document.createElement('p');
-            p.innerHTML = '已加载 ' + data.count + ' 条消息';
-            p.style.textAlign = 'center';
-            p.style.color = '#888';
-            messages.insertBefore(p, messages.firstChild);
-            if (data.count < 10) {
-                document.getElementById('loadMoreBtn').style.display = 'none';
-            }
-        });
+            socket.emit('join', { 'group_id': group_id });
 
-        socket.on('previous_message', function (data) {
-            var messages = document.getElementById('messages');
-            var p = document.createElement('p');
-            p.innerHTML = data.msg;
-            messages.insertBefore(p, messages.firstChild);
-        });
+            socket.on('loaded_messages', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = '已加载 ' + data.count + ' 条消息';
+                p.style.textAlign = 'center';
+                p.style.color = '#888';
+                messages.insertBefore(p, messages.firstChild);
+                if (data.count < 10) {
+                    document.getElementById('loadMoreBtn').style.display = 'none';
+                }
+            });
 
-        socket.on('loaded_more_messages', function (data) {
-            messageOffset += data.count;
-            if (data.count < 10) {
-                document.getElementById('loadMoreBtn').style.display = 'none';
-            }
-        });
+            socket.on('previous_message', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = data.msg;
+                messages.insertBefore(p, messages.firstChild);
+            });
 
-        socket.on('message', function (data) {
-            var messages = document.getElementById('messages');
-            var p = document.createElement('p');
-            p.innerHTML = data.msg;
-            messages.appendChild(p);
-            messages.scrollTop = messages.scrollHeight;
-        });
+            socket.on('loaded_more_messages', function (data) {
+                messageOffset += data.count;
+                if (data.count < 10) {
+                    document.getElementById('loadMoreBtn').style.display = 'none';
+                }
+            });
 
-        document.getElementById('messageForm').onsubmit = function (e) {
-            e.preventDefault();
-            var msg = document.getElementById('message').value.trim();
-            if (msg !== "") {
-                socket.emit('message', { 'group_id': group_id, 'msg': msg });
-                document.getElementById('message').value = '';
-            }
-        };
+            socket.on('message', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = data.msg;
+                messages.appendChild(p);
+                messages.scrollTop = messages.scrollHeight;
+            });
 
-        document.getElementById('loadMoreBtn').onclick = function () {
-            socket.emit('load_more_messages', { 'group_id': group_id, 'offset': messageOffset });
-        };
+            document.getElementById('messageForm').onsubmit = function (e) {
+                e.preventDefault();
+                var msg = document.getElementById('message').value.trim();
+                if (msg !== "") {
+                    socket.emit('message', { 'group_id': group_id, 'msg': msg });
+                    document.getElementById('message').value = '';
+                }
+            };
 
-        window.onbeforeunload = function () {
-            socket.emit('leave', { 'group_id': group_id });
-        };
+            document.getElementById('loadMoreBtn').onclick = function () {
+                socket.emit('load_more_messages', { 'group_id': group_id, 'offset': messageOffset });
+            };
+
+            window.onbeforeunload = function () {
+                socket.emit('leave', { 'group_id': group_id });
+            };
         });
     </script>
     <footer>
