@@ -4,60 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <title>群聊 - 群号: {{ group_id }}</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
-        footer {
-            background-color: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        footer p {
-            margin: 0;
-            color: #6c757d;
-            font-size: 14px;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .github-link {
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            color: #007BFF;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-
-        .github-link img {
-            margin-right: 8px;
-        }
-
-        .github-link:hover {
-            background-color: #f0f0f0;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-        }
-
-        h2,
-        h3 {
-            text-align: center;
-            color: #333;
-        }
-
         #messages {
             border: 1px solid #ccc;
             height: 400px;
@@ -74,153 +24,72 @@
         #messages p {
             margin: 5px 0;
         }
-
-        #loadMoreBtn {
-            display: block;
-            width: 80%;
-            margin: 0 auto 10px auto;
-            padding: 10px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-
-        #loadMoreBtn:hover {
-            background-color: #0056b3;
-        }
-
-        #messageForm {
-            display: flex;
-            justify-content: center;
-            width: 80%;
-            margin: auto;
-        }
-
-        #messageForm input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 5px 0 0 5px;
-            outline: none;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        #messageForm input[type="submit"] {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 0 5px 5px 0;
-        }
-
-        #messageForm input[type="submit"]:hover {
-            background-color: #218838;
-        }
-
-        .flash-message {
-            max-width: 80%;
-            margin: 20px auto;
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border: 1px solid #f5c6cb;
-            border-radius: 5px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .back-link {
-            text-align: center;
-            margin: 20px;
-        }
-
-        .back-link a {
-            text-decoration: none;
-            color: #007BFF;
-            font-weight: bold;
-        }
-
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-
-        .setting-btn {
-            display: block;
-            width: 80%;
-            margin: 20px auto;
-            padding: 10px;
-            background-color: #ffc107;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-
-        .setting-btn:hover {
-            background-color: #e0a800;
-        }
     </style>
 </head>
 
 <body>
-    <header>
-        <nav class="navbar">
-            <div class="container">
-                <!-- GitHub链接和其他导航链接居中 -->
-                <div class="nav-links">
-                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
-                        <img width="18" src="/static/images/github.svg" alt="Github Logo">
-                        GitHub
-                    </a>
-                </div>
-            </div>
+    <header class="bg-white shadow">
+        <nav class="navbar navbar-expand-lg navbar-light container">
+            <a href="https://github.com/zjx-kimi/Chat" class="navbar-brand d-flex align-items-center">
+                <img width="18" src="/static/images/github.svg" alt="Github Logo" class="me-2">
+                GitHub
+            </a>
         </nav>
     </header>
-    <h2>群聊 - 群号: {{ group_id }}</h2>
-    {% if group_name %}
-    <h3>群名: {{ group_name }}</h3>
-    {% endif %}
 
-    {% if canedit %}
-    <button class="setting-btn" onclick="window.location.href='{{ url_for('group_settings', group_id=group_id) }}'">Go
-        to Setting</button>
-    {% endif %}
+    <div class="container mt-4">
+        <h2 class="text-center">群聊 - 群号: {{ group_id }}</h2>
+        {% if group_name %}
+        <h3 class="text-center">群名: {{ group_name }}</h3>
+        {% endif %}
 
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="flash-message">
-        <ul>
-            {% for message in messages %}
-            <li>{{ message }}</li>
-            {% endfor %}
-        </ul>
+        {% if canedit %}
+        <div class="text-center mb-3">
+            <a href="{{ url_for('group_settings', group_id=group_id) }}" class="btn btn-warning">群组设置</a>
+        </div>
+        {% endif %}
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <ul class="mb-0">
+                {% for message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="d-flex justify-content-center mb-2">
+            <button id="loadMoreBtn" class="btn btn-secondary">加载更多</button>
+        </div>
+        <div id="messages" class="mb-3"></div>
+
+        <form id="messageForm" class="d-flex justify-content-center">
+            <input type="text" id="message" class="form-control me-2" autocomplete="off" placeholder="输入消息" required>
+            <button type="submit" class="btn btn-success">发送</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <a href="{{ url_for('index') }}" class="btn btn-link">返回主页</a>
+        </div>
     </div>
-    {% endif %}
-    {% endwith %}
 
-    <button id="loadMoreBtn">加载更多</button>
-    <div id="messages"></div>
+    <footer class="bg-light py-3 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
 
-    <form id="messageForm">
-        <input type="text" id="message" autocomplete="off" placeholder="输入消息" required>
-        <input type="submit" value="发送">
-    </form>
-
-    <div class="back-link">
-        <a href="{{ url_for('index') }}">返回主页</a>
-    </div>
+    <!-- 引入 Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             var socket = io();
-            var group_id = {{ group_id }}; // Ensure group_id is a number. If it's a string, use quotes: "{{ group_id }}"
+            var group_id = {{ group_id }}; // 确保 group_id 是数字
 
             var messageOffset = 10;  // 已加载的消息数量
 
@@ -278,11 +147,6 @@
             };
         });
     </script>
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 Kimi. All rights reserved.</p>
-        </div>
-    </footer>
 </body>
 
 </html>

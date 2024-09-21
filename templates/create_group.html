@@ -1,154 +1,67 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 
 <head>
     <meta charset="UTF-8">
     <title>创建群组</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        footer {
-            background-color: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        footer p {
-            margin: 0;
-            color: #6c757d;
-            font-size: 14px;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .github-link {
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            color: #007BFF;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-
-        .github-link img {
-            margin-right: 8px;
-        }
-
-        .github-link:hover {
-            background-color: #f0f0f0;
-        }
-
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-        }
-
-        form {
-            max-width: 400px;
-            margin: auto;
-        }
-
-        input[type="text"] {
-            width: 100%;
-            padding: 12px;
-            margin: 8px 0;
-            box-sizing: border-box;
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-
-        .flash-message {
-            max-width: 400px;
-            margin: 20px auto;
-            background-color: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border: 1px solid #c3e6cb;
-            border-radius: 5px;
-            text-align: center;
-        }
-
-        .back-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .back-link a {
-            text-decoration: none;
-            color: #007BFF;
-            font-weight: bold;
-        }
-
-        .back-link a:hover {
-            text-decoration: underline;
+            background-color: #f8f9fa;
         }
     </style>
 </head>
 
 <body>
-    <header>
-        <nav class="navbar">
-            <div class="container">
-                <!-- GitHub链接和其他导航链接居中 -->
-                <div class="nav-links">
-                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
-                        <img width="18" src="/static/images/github.svg"
-                            alt="Github Logo">
-                        GitHub
-                    </a>
-                </div>
-            </div>
+    <header class="bg-white shadow">
+        <nav class="navbar navbar-expand-lg navbar-light container">
+            <a href="https://github.com/zjx-kimi/Chat" class="navbar-brand d-flex align-items-center">
+                <img width="18" src="/static/images/github.svg" alt="Github Logo" class="me-2">
+                GitHub
+            </a>
         </nav>
     </header>
-    <h1 style="text-align:center;">创建群组</h1>
 
-    <!-- 显示 Flash 消息 -->
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="flash-message">
-        <ul>
-            {% for message in messages %}
-            <li>{{ message }}</li>
-            {% endfor %}
-        </ul>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">创建群组</h1>
+
+        <!-- 显示 Flash 消息 -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <ul class="mb-0">
+                {% for message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('create_group') }}" method="POST" class="mx-auto" style="max-width: 400px;">
+            <div class="mb-3">
+                <label for="group_name" class="form-label">群组名：</label>
+                <input type="text" id="group_name" name="group_name" class="form-control" placeholder="输入群组名称" required>
+            </div>
+
+            <button type="submit" class="btn btn-success w-100">创建</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <a href="{{ url_for('index') }}" class="btn btn-link">返回主页</a>
+        </div>
     </div>
-    {% endif %}
-    {% endwith %}
 
-    <form action="{{ url_for('create_group') }}" method="POST">
-        <label for="group_name">群组名：</label>
-        <input type="text" id="group_name" name="group_name" placeholder="输入群组名称" required>
-
-        <button type="submit">创建</button>
-    </form>
-
-    <div class="back-link">
-        <a href="{{ url_for('index') }}">返回主页</a>
-    </div>
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 Kimi. All rights reserved.</p>
+    <footer class="bg-light py-3 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">&copy; 2024 Kimi. All rights reserved.</p>
         </div>
     </footer>
+
+    <!-- 引入 Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

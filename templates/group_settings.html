@@ -3,294 +3,155 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>管理员面板</title>
+    <title>群组设置 - 群号: {{ group_id }}</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        footer {
-            background-color: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        footer p {
-            margin: 0;
-            color: #6c757d;
-            font-size: 14px;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .github-link {
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            color: #007BFF;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-
-        .github-link img {
-            margin-right: 8px;
-        }
-
-        .github-link:hover {
-            background-color: #f0f0f0;
-        }
-
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
+            background-color: #f8f9fa;
         }
 
-        h2,
-        h3 {
-            color: #333;
-            text-align: center;
-        }
-
-        table {
-            width: 90%;
-            margin: 20px auto;
-            border-collapse: collapse;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        th,
-        td {
-            border: 1px solid #ddd;
-            padding: 12px 15px;
-            text-align: center;
-        }
-
-        th {
-            background-color: #f4f4f4;
-            color: #333;
-        }
-
-        tr:nth-child(even) {
-            background-color: #fafafa;
-        }
-
-        select,
-        input[type="text"],
-        input[type="number"] {
-            width: 90%;
-            padding: 8px;
-            margin: 5px 0;
-            box-sizing: border-box;
-        }
-
-        button {
-            padding: 8px 16px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        .flash-message {
-            max-width: 800px;
-            margin: 20px auto;
-            background-color: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border: 1px solid #c3e6cb;
-            border-radius: 5px;
-            text-align: center;
-        }
-
-        .back-link {
-            text-align: center;
-            margin: 20px;
-        }
-
-        .back-link a {
-            text-decoration: none;
-            color: #007BFF;
-            font-weight: bold;
-        }
-
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-
-        form {
-            margin: 0;
+        .table-responsive {
+            overflow-x: auto;
         }
     </style>
 </head>
 
 <body>
-    <header>
-        <nav class="navbar">
-            <div class="container">
-                <!-- GitHub链接和其他导航链接居中 -->
-                <div class="nav-links">
-                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
-                        <img width="18" src="/static/images/github.svg"
-                            alt="Github Logo">
-                        GitHub
-                    </a>
-                </div>
-            </div>
+    <header class="bg-white shadow">
+        <nav class="navbar navbar-expand-lg navbar-light container">
+            <a href="https://github.com/zjx-kimi/Chat" class="navbar-brand d-flex align-items-center">
+                <img width="18" src="/static/images/github.svg" alt="Github Logo" class="me-2">
+                GitHub
+            </a>
         </nav>
     </header>
-    <h2> {{ group_id }} 群管理员面板</h2>
 
-    <!-- 显示 Flash 消息 -->
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="flash-message">
-        <ul>
-            {% for message in messages %}
-            <li>{{ message }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-    {% endwith %}
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">{{ group_id }} 群组设置</h2>
 
-    <!-- 添加成员到群组 -->
-    <h3>添加成员到群组</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="add_member">
-        <table>
-            <tr>
-                <th>选择用户</th>
-                <th>操作</th>
-            </tr>
-            <tr>
-                <td>
-                    <select name="member" required>
+        <!-- 显示 Flash 消息 -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <ul class="mb-0">
+                {% for message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- 添加成员到群组 -->
+        <h3>添加成员到群组</h3>
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="action" value="add_member">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="add_member" class="form-label">选择用户：</label>
+                    <select name="member" id="add_member" class="form-select" required>
                         {% for user in users %}
                         <option value="{{ user[0] }}">{{ user[0] }}</option>
                         {% endfor %}
                     </select>
-                </td>
-                <td>
-                    <button type="submit">添加成员</button>
-                </td>
-            </tr>
-        </table>
-    </form>
+                </div>
+                <div class="col-md-6 align-self-end">
+                    <button type="submit" class="btn btn-success w-100">添加成员</button>
+                </div>
+            </div>
+        </form>
 
-    <!-- 从群组移除成员 -->
-    <h3>从群组移除成员</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="remove_member">
-        <table>
-            <tr>
-                <th>选择成员</th>
-                <th>操作</th>
-            </tr>
-            <tr>
-                <td>
-                    <select name="member" required>
+        <!-- 从群组移除成员 -->
+        <h3>从群组移除成员</h3>
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="action" value="remove_member">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="remove_member" class="form-label">选择成员：</label>
+                    <select name="member" id="remove_member" class="form-select" required>
                         {% for member in members %}
                         <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
                         {% endfor %}
                     </select>
-                </td>
-                <td>
-                    <button type="submit">移除成员</button>
-                </td>
-            </tr>
-        </table>
-    </form>
-    <!-- 从群组移除成员并加入黑名单 -->
-    <h3>从群组移除成员并加入黑名单</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="insertblacklist">
-        <table>
-            <tr>
-                <th>选择成员</th>
-                <th>操作</th>
-            </tr>
-            <tr>
-                <td>
-                    <select name="member" required>
+                </div>
+                <div class="col-md-6 align-self-end">
+                    <button type="submit" class="btn btn-danger w-100">移除成员</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- 从群组移除成员并加入黑名单 -->
+        <h3>从群组移除成员并加入黑名单</h3>
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="action" value="insertblacklist">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="blacklist_member" class="form-label">选择成员：</label>
+                    <select name="member" id="blacklist_member" class="form-select" required>
                         {% for member in members %}
                         <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
                         {% endfor %}
                     </select>
-                </td>
-                <td>
-                    <button type="submit">移除成员并加入黑名单</button>
-                </td>
-            </tr>
-        </table>
-    </form>
+                </div>
+                <div class="col-md-6 align-self-end">
+                    <button type="submit" class="btn btn-warning w-100">移除并加入黑名单</button>
+                </div>
+            </div>
+        </form>
 
-    <!-- 提升管理员 -->
-    <h3>提升管理员</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="promote_admin">
-        <table>
-            <tr>
-                <th>选择成员</th>
-                <th>操作</th>
-            </tr>
-            <tr>
-                <td>
-                    <select name="member" required>
+        <!-- 提升管理员 -->
+        <h3>提升管理员</h3>
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="action" value="promote_admin">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="promote_member" class="form-label">选择成员：</label>
+                    <select name="member" id="promote_member" class="form-select" required>
                         {% for member in members if member[2] == 'member' %}
                         <option value="{{ member[1] }}">{{ member[1] }}</option>
                         {% endfor %}
                     </select>
-                </td>
-                <td>
-                    <button type="submit">提升为管理员</button>
-                </td>
-            </tr>
-        </table>
-    </form>
+                </div>
+                <div class="col-md-6 align-self-end">
+                    <button type="submit" class="btn btn-primary w-100">提升为管理员</button>
+                </div>
+            </div>
+        </form>
 
-    <!-- 降级管理员 -->
-    <h3>降级管理员</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="demote_admin">
-        <table>
-            <tr>
-                <th>选择管理员</th>
-                <th>操作</th>
-            </tr>
-            <tr>
-                <td>
-                    <select name="member" required>
+        <!-- 降级管理员 -->
+        <h3>降级管理员</h3>
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="action" value="demote_admin">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="demote_admin" class="form-label">选择管理员：</label>
+                    <select name="member" id="demote_admin" class="form-select" required>
                         {% for member in members if member[2] == 'admin' %}
                         <option value="{{ member[1] }}">{{ member[1] }}</option>
                         {% endfor %}
                     </select>
-                </td>
-                <td>
-                    <button type="submit">降级为成员</button>
-                </td>
-            </tr>
-        </table>
-    </form>
+                </div>
+                <div class="col-md-6 align-self-end">
+                    <button type="submit" class="btn btn-secondary w-100">降级为成员</button>
+                </div>
+            </div>
+        </form>
 
-    <div class="back-link">
-        <a href="{{ url_for('index') }}">返回主页</a>
+        <div class="text-center mt-4">
+            <a href="{{ url_for('index') }}" class="btn btn-link">返回主页</a>
+        </div>
     </div>
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 Kimi. All rights reserved.</p>
+
+    <footer class="bg-light py-3 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">&copy; 2024 Kimi. All rights reserved.</p>
         </div>
     </footer>
+
+    <!-- 引入 Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

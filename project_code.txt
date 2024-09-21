@@ -1,0 +1,2710 @@
+===== 文件: ./app.py =====
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_socketio import SocketIO, join_room, leave_room, emit
+import sqlite3
+from markupsafe import escape
+from werkzeug.security import generate_password_hash, check_password_hash
+import time
+import psutil
+
+app = Flask(__name__)
+app.secret_key = '一键三连'  # 请替换为一个安全的密钥
+socketio = SocketIO(app)
+
+DATABASE = 'chat.db'
+INITIAL_GROUP_ID = 10000
+MAX_ADMINS_PER_GROUP = 3
+
+# 记录服务器启动时间
+server_start_time = time.time()
+
+# 数据库初始化
+def init_db():
+    with app.app_context():
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        # 创建用户表
+        c.execute('''CREATE TABLE IF NOT EXISTS users
+                    (username TEXT PRIMARY KEY,
+                    password TEXT,
+                    is_admin INTEGER,
+                    is_banned INTEGER)''')
+        # 创建群组表
+        c.execute('''CREATE TABLE IF NOT EXISTS groups
+                    (group_id INTEGER PRIMARY KEY,
+                    group_name TEXT UNIQUE)''')
+        # 创建消息表
+        c.execute('''CREATE TABLE IF NOT EXISTS messages
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id INTEGER,
+                    username TEXT,
+                    message TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (group_id) REFERENCES groups(group_id),
+                    FOREIGN KEY (username) REFERENCES users(username))''')
+        # 创建群组成员表
+        c.execute('''CREATE TABLE IF NOT EXISTS group_members
+                    (group_id INTEGER,
+                    username TEXT,
+                    role TEXT DEFAULT 'member',
+                    PRIMARY KEY (group_id, username),
+                    FOREIGN KEY (group_id) REFERENCES groups(group_id),
+                    FOREIGN KEY (username) REFERENCES users(username))''')
+        # 检查是否有群组，如果没有则插入一个虚拟群组
+        c.execute("SELECT COUNT(*) FROM groups")
+        group_count = c.fetchone()[0]
+        if group_count == 0:
+            # 插入一个虚拟群组，群号为9999，将在应用逻辑中忽略
+            c.execute("INSERT INTO groups (group_id, group_name) VALUES (?, ?)", (9999, '虚拟群组'))
+        conn.commit()
+        conn.close()
+with app.app_context():
+    init_db()
+
+# 用户密码修改路由
+@app.route('/change_password', methods=['GET', 'POST'])
+def change_password():
+    if 'username' not in session:
+        flash("请先登录", "warning")
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        if not current_password or not new_password or not confirm_password:
+            flash('所有字段都必须填写', 'danger')
+            return redirect(url_for('change_password'))
+
+        username = session['username']
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT password FROM users WHERE username=?", (username,))
+        user = c.fetchone()
+
+        if user:
+            stored_password = user[0]
+            if not check_password_hash(stored_password, current_password):
+                flash('当前密码不正确', 'danger')
+                conn.close()
+                return redirect(url_for('change_password'))
+
+            if new_password != confirm_password:
+                flash('新密码和确认密码不匹配', 'danger')
+                conn.close()
+                return redirect(url_for('change_password'))
+
+            # 更新密码
+            hashed_new_password = generate_password_hash(new_password)
+            c.execute("UPDATE users SET password=? WHERE username=?", (hashed_new_password, username))
+            conn.commit()
+            conn.close()
+
+            flash('密码修改成功', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('用户不存在', 'danger')
+            conn.close()
+            return redirect(url_for('change_password'))
+
+    return render_template('change_password.html')
+
+
+# 用户注册路由
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = escape(request.form['username'])
+        password = request.form['password']
+
+        if not username or not password:
+            flash("用户名和密码不能为空")
+            return redirect(url_for('register'))
+
+        # 连接数据库
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+
+        # 查询用户数量
+        c.execute("SELECT COUNT(*) FROM users")
+        user_count = c.fetchone()[0]
+
+        # 如果没有用户，当前用户为管理员
+        is_admin = 1 if user_count == 0 else 0
+
+        # 哈希密码
+        hashed_password = generate_password_hash(password)
+
+        # 尝试插入用户数据
+        try:
+            c.execute("INSERT INTO users (username, password, is_admin, is_banned) VALUES (?, ?, ?, 0)",
+                      (username, hashed_password, is_admin))
+            conn.commit()
+            flash("注册成功，请登录")
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash("用户名已存在")
+            return redirect(url_for('register'))
+        finally:
+            conn.close()
+
+    return render_template('register.html')
+
+# 用户登录路由
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = escape(request.form['username'])
+        password = request.form['password']
+
+        if not username or not password:
+            flash("用户名和密码不能为空")
+            return redirect(url_for('login'))
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT password, is_admin, is_banned FROM users WHERE username=?", (username,))
+        user = c.fetchone()
+        conn.close()
+
+        if user:
+            hashed_password, is_admin, is_banned = user
+            if is_banned:
+                flash("你已被封禁")
+                return redirect(url_for('login'))
+            if check_password_hash(hashed_password, password):
+                session['username'] = username
+                session['is_admin'] = is_admin
+                flash("登录成功")
+                return redirect(url_for('index'))
+            else:
+                flash("用户名或密码错误")
+                return redirect(url_for('login'))
+        else:
+            flash("用户名或密码错误")
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+# 用户登出路由
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash("已登出")
+    return redirect(url_for('login'))
+
+# 主页路由
+@app.route('/index')
+def index():
+    if 'username' in session:
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        username = session['username']
+        # 获取用户所属的群组
+        c.execute("""
+            SELECT g.group_id, g.group_name
+            FROM groups g
+            JOIN group_members gm ON g.group_id = gm.group_id
+            WHERE gm.username=?
+              AND gm.role NOT IN ('blacklist')
+        """, (username,))
+        groups = c.fetchall()
+        conn.close()
+        return render_template('index.html', username=username, groups=groups)
+    else:
+        return redirect(url_for('login'))
+
+# 创建群组路由
+@app.route('/create_group', methods=['GET', 'POST'])
+def create_group():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        group_name = escape(request.form['group_name'])
+        username = session['username']
+
+        if not group_name:
+            flash("群组名称不能为空")
+            return redirect(url_for('create_group'))
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        try:
+            # 获取下一个群号
+            c.execute("SELECT MAX(group_id) FROM groups")
+            max_group_id = c.fetchone()[0]
+            next_group_id = max_group_id + 1 if max_group_id and max_group_id >= INITIAL_GROUP_ID else INITIAL_GROUP_ID
+
+            # 插入新群组
+            c.execute("INSERT INTO groups (group_id, group_name) VALUES (?, ?)", (next_group_id, group_name))
+            # 将创建者加入群组并设为所有者
+            c.execute("INSERT INTO group_members (group_id, username, role) VALUES (?, ?, 'owner')",
+                      (next_group_id, username))
+            conn.commit()
+            flash(f"群组 '{group_name}' 创建成功，群号为 {next_group_id}")
+            return redirect(url_for('index'))
+        except sqlite3.IntegrityError:
+            flash("群组名称已存在")
+            return redirect(url_for('create_group'))
+        finally:
+            conn.close()
+
+    return render_template('create_group.html')
+
+# 加入群组路由
+@app.route('/join_group', methods=['GET', 'POST'])
+def join_group():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        try:
+            group_id = int(request.form['group_id'])
+        except ValueError:
+            flash("群号必须是数字")
+            return redirect(url_for('join_group'))
+
+        username = session['username']
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM groups WHERE group_id=?", (group_id,))
+        group = c.fetchone()
+
+        if group and group_id >= INITIAL_GROUP_ID:
+            # 检查是否在黑名单
+            c.execute("SELECT * FROM group_members WHERE group_id=? AND username=? AND role='blacklist'",
+                      (group_id, username))
+            blacklist_entry = c.fetchone()
+            if blacklist_entry and not is_group_owner_or_admin(group_id, session['username']):
+                flash("你已被加入黑名单，无法加入该群组")
+                conn.close()
+                return redirect(url_for('join_group'))
+
+            try:
+                c.execute("INSERT INTO group_members (group_id, username, role) VALUES (?, ?, 'member')",
+                          (group_id, username))
+                conn.commit()
+                flash(f"成功加入群组 '{group[1]}'")
+                return redirect(url_for('index'))
+            except sqlite3.IntegrityError:
+                flash("你已在该群组中")
+                return redirect(url_for('join_group'))
+        else:
+            flash("群组不存在")
+            return redirect(url_for('join_group'))
+        conn.close()
+
+    return render_template('join_group.html')
+
+def get_group_owner(group_id):
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT username FROM group_members WHERE group_id=? AND role='owner'", (group_id,))
+    owners = c.fetchall()
+    conn.close()
+    return [owner[0] for owner in owners]
+
+def is_group_owner_or_admin(group_id, username):
+    return username in get_group_owner(group_id) or session.get('is_admin')
+# 聊天路由
+@app.route('/chat/<int:group_id>')
+def chat(group_id):
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    username = session['username']
+    # 检查用户是否属于该群组且群号有效
+    c.execute("""
+        SELECT g.group_name, gm.role
+        FROM group_members gm
+        JOIN groups g ON gm.group_id = g.group_id
+        WHERE gm.group_id=? AND gm.username=?
+    """, (group_id, username))
+    result = c.fetchone()
+    conn.close()
+
+    if result and group_id >= INITIAL_GROUP_ID:
+        group_name, role = result
+        if role == 'blacklist':
+            flash("你已被加入黑名单，无法访问该群组")
+            return redirect(url_for('index'))
+        return render_template('chat.html', username=username, group_id=group_id, group_name=group_name, canedit=is_group_owner_or_admin(group_id, session['username']))
+    else:
+        flash("你没有权限访问该群组")
+        return redirect(url_for('index'))
+# 聊天设置路由
+
+
+
+@app.route('/chat/<int:group_id>/settings', methods=['GET', 'POST'])
+def group_settings(group_id):
+    # 检查用户是否有权限访问此页面
+    if 'username' not in session or not is_group_owner_or_admin(group_id, session['username']):
+        flash("你没有权限访问这个页面")
+        return redirect(url_for('index'))
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM groups WHERE group_id=?", (group_id,))
+    group = c.fetchone()
+
+    c.execute("SELECT * FROM group_members WHERE group_id=?", (group_id,))
+    members = c.fetchall()
+
+    c.execute("SELECT username FROM users WHERE is_banned=0")
+    users = c.fetchall()
+
+    c.execute("SELECT username FROM users WHERE is_admin=1")
+    cantremove = c.fetchall()
+    
+    # 在 Cantremove 中添加群主用户名
+    for member in members:
+        if member[2] == 'owner':
+            cantremove.append((member[2],))
+    # 如果是POST请求，处理表单提交的操作
+    if request.method == 'POST':
+        action = request.form.get('action')  # 获取操作类型
+        member = escape(request.form.get('member'))  # 获取成员用户名
+        if action == 'add_member':  # 添加成员到群组
+            try:
+                c.execute("INSERT INTO group_members (group_id, username, role) VALUES (?, ?, 'member')", (group_id, member))
+                conn.commit()
+                flash(f"用户 '{member}' 已被添加到群组 '{group_id}'")
+            except sqlite3.IntegrityError:
+                flash("用户已在该群组中或群组不存在")
+
+        elif action == 'remove_member':  # 从群组移除成员
+            # 判断 member 是否在 cantremove 中
+            if member not in [user[0] for user in cantremove]:
+                c.execute("DELETE FROM group_members WHERE group_id=? AND username=?", (group_id, member))
+                conn.commit()
+                flash(f"用户 '{member}' 已被从群组 '{group_id}' 移除")
+            else :
+                flash(f"用户 '{member}' 是管理员，无法移除")
+        elif action == 'insertblacklist':  # 从群组移除成员
+            if member not in [user[0] for user in cantremove]:
+                c.execute("DELETE FROM group_members WHERE group_id=? AND username=?", (group_id, member))
+                c.execute("INSERT INTO group_members (group_id, username, role) VALUES (?, ?, 'blacklist')", (group_id, member))
+                conn.commit()
+                flash(f"用户 '{member}' 已被从群组 '{group_id}' 移除并加入黑名单")
+            else :
+                flash(f"用户 '{member}' 是管理员，无法移除")
+            
+        elif action == 'promote_admin':  # 提升成员为管理员
+            c.execute("UPDATE group_members SET role='admin' WHERE group_id=? AND username=?", (group_id, member))
+            if c.rowcount == 0:
+                flash("用户未在该群组中或群组不存在")
+            else:
+                conn.commit()
+                flash(f"用户 '{member}' 已被提升为管理员")
+
+        elif action == 'demote_admin':  # 降级管理员为普通成员
+            c.execute("UPDATE group_members SET role='member' WHERE group_id=? AND username=?", (group_id, member))
+            if c.rowcount == 0:
+                flash("用户未在该群组中或群组不存在")
+            else:
+                conn.commit()
+                flash(f"用户 '{member}' 已被降级为成员")
+
+        conn.close()
+        return redirect(url_for('group_settings', group_id=group_id))
+    
+    for member in members:
+        if member[1] in [user[0] for user in users]:
+            users.remove((member[1],))
+
+    conn.close()
+    return render_template('group_settings.html', group=group, members=members, group_id=group_id, users=users)
+
+
+# 管理员路由
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
+    if 'username' not in session or not session.get('is_admin'):
+        flash("你没有管理员权限")
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+
+        if action == 'ban':
+            target_user = escape(request.form.get('target_user'))
+            if target_user == session['username']:
+                flash("你不能禁止自己")
+            else:
+                # 将用户从所有群组中移除，并加入黑名单
+                c.execute("UPDATE users SET is_banned=1 WHERE username=?", (target_user,))
+                c.execute("DELETE FROM group_members WHERE username=?", (target_user,))
+                c.execute("INSERT INTO group_members (group_id, username, role) SELECT group_id, ?, 'blacklist' FROM groups", (target_user,))
+                conn.commit()
+                flash(f"用户 '{target_user}' 已被封禁并加入所有群组的黑名单")
+        
+        conn.close()
+        return redirect(url_for('admin'))
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 获取所有用户（管理）
+    c.execute("SELECT username FROM users WHERE is_admin=1")
+    admin = c.fetchall()
+    # 获取所有用户（未被封禁）
+    c.execute("SELECT username FROM users WHERE is_banned=0 AND is_admin=0")
+    users = c.fetchall()
+    # 获取所有用户（被封禁）
+    c.execute("SELECT username FROM users WHERE is_banned=1")
+    baned = c.fetchall()
+    # 获取所有群组（排除虚拟群组）
+    c.execute("SELECT group_id, group_name FROM groups WHERE group_id != 9999")
+    groups = c.fetchall()
+    # 获取群组成员
+    c.execute("SELECT group_id, username, role FROM group_members")
+    members = c.fetchall()
+    conn.close()
+
+    return render_template('admin.html', users=users, baned = baned, groups=groups, members=members, admin = admin)
+
+# 邀请用户加入群组路由
+@app.route('/invite', methods=['POST'])
+def invite():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    inviter = session['username']
+    group_id = request.form.get('group_id')
+    invitee = escape(request.form.get('invitee'))
+
+    try:
+        group_id = int(group_id)
+    except ValueError:
+        flash("群号必须是数字")
+        return redirect(url_for('admin'))
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 检查邀请者是否是群组管理员或所有者
+    c.execute("""
+        SELECT role FROM group_members
+        WHERE group_id=? AND username=?
+    """, (group_id, inviter))
+    role = c.fetchone()
+    if role and role[0] in ['admin', 'owner']:
+        # 检查被邀请者是否存在且未被封禁
+        c.execute("SELECT is_banned FROM users WHERE username=?", (invitee,))
+        user = c.fetchone()
+        if not user:
+            flash("被邀请的用户不存在")
+        elif user[0]:
+            flash("被邀请的用户已被封禁")
+        else:
+            # 检查邀请者是否为所有者或管理员
+            # 确保邀请者没有超过管理员数量限制
+            if role[0] == 'admin':
+                # 检查是否超过管理员数量限制
+                c.execute("SELECT COUNT(*) FROM group_members WHERE group_id=? AND role='admin'", (group_id,))
+                admin_count = c.fetchone()[0]
+                if admin_count >= MAX_ADMINS_PER_GROUP:
+                    flash(f"群组 {group_id} 已达到最大管理员数量 ({MAX_ADMINS_PER_GROUP})")
+                    conn.close()
+                    return redirect(url_for('admin'))
+            try:
+                # 将邀请者添加为成员（默认为 'member')
+                c.execute("INSERT INTO group_members (group_id, username, role) VALUES (?, ?, 'member')", (group_id, invitee))
+                conn.commit()
+                flash(f"用户 '{invitee}' 已被邀请加入群组 {group_id}")
+            except sqlite3.IntegrityError:
+                flash("用户已在该群组中或群组不存在")
+    else:
+        flash("你不是该群组的管理员或所有者")
+    conn.close()
+    return redirect(url_for('admin'))
+
+# 服务器状态路由
+@app.route('/server_status')
+def server_status():
+    if 'username' not in session or not session.get('is_admin'):
+        flash("你没有访问服务器状态的权限")
+        return redirect(url_for('index'))
+    
+    # 计算运行时间
+    current_time = time.time()
+    uptime_seconds = int(current_time - server_start_time)
+    uptime_str = time.strftime('%H:%M:%S', time.gmtime(uptime_seconds))
+    
+    # 获取内存使用情况
+    memory_info = psutil.virtual_memory()
+    memory_used_mb = round(memory_info.used / (1024 * 1024), 2)
+    
+    # 获取CPU使用率
+    cpu_usage = psutil.cpu_percent(interval=1)
+    
+    # 获取磁盘空间
+    disk_info = psutil.disk_usage('/')
+    disk_used_gb = round(disk_info.used / (1024 * 1024 * 1024), 2)
+    
+    return render_template('server_status.html',
+                           uptime=uptime_str,
+                           memory=memory_used_mb,
+                           cpu_usage=cpu_usage,
+                           disk_space=disk_used_gb)
+
+# SocketIO 事件：加入群组
+@socketio.on('join')
+def handle_join(data):
+    username = session.get('username')
+    if not username:
+        return
+
+    group_id = data.get('group_id')
+    if not isinstance(group_id, int):
+        emit('error', {'msg': '无效的群组 ID'})
+        return
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 检查用户是否属于该群组且不在黑名单
+    c.execute("""
+        SELECT role FROM group_members
+        WHERE group_id=? AND username=?
+    """, (group_id, username))
+    membership = c.fetchone()
+    conn.close()
+
+    if membership and group_id >= INITIAL_GROUP_ID and membership[0] != 'blacklist':
+        join_room(str(group_id))
+        # 发送历史消息
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("""
+            SELECT username, message, strftime('%Y-%m-%d %H:%M:%S', timestamp)
+            FROM messages
+            WHERE group_id=?
+            ORDER BY timestamp DESC
+            LIMIT 10 OFFSET 0
+        """, (group_id,))
+        messages = c.fetchall()
+        conn.close()
+        for message in reversed(messages):
+            timestamp = message[2]
+            emit('message', {'msg': f"[{timestamp}] {message[0]}: {message[1]}"}, to=request.sid)
+        emit('loaded_messages', {'count': len(messages)}, to=request.sid)
+    else:
+        emit('error', {'msg': '你没有权限加入该群组'})
+
+# SocketIO 事件：发送消息
+@socketio.on('message')
+def handle_message(data):
+    username = session.get('username')
+    if not username:
+        return
+
+    group_id = data.get('group_id')
+    msg = escape(data.get('msg', ''))
+
+    if not isinstance(group_id, int) or not msg:
+        emit('error', {'msg': '无效的群组 ID 或空消息'})
+        return
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 检查用户是否属于该群组且不在黑名单
+    c.execute("""
+        SELECT role FROM group_members
+        WHERE group_id=? AND username=?
+    """, (group_id, username))
+    membership = c.fetchone()
+
+    if membership and group_id >= INITIAL_GROUP_ID and membership[0] != 'blacklist':
+        # 将消息存储到数据库
+        c.execute("INSERT INTO messages (group_id, username, message) VALUES (?, ?, ?)",
+                  (group_id, username, msg))
+        last_id = c.lastrowid
+        conn.commit()
+
+        # 获取刚插入的消息的时间戳
+        c.execute("SELECT strftime('%Y-%m-%d %H:%M:%S', timestamp) FROM messages WHERE id = ?", (last_id,))
+        timestamp = c.fetchone()[0]
+        conn.close()
+
+        # 发送消息到房间
+        emit('message', {'msg': f"[{timestamp}] {username}: {msg}"}, to=str(group_id))
+    else:
+        conn.close()
+        emit('error', {'msg': '你没有权限发送消息到该群组'})
+
+# SocketIO 事件：加载更多消息
+@socketio.on('load_more_messages')
+def handle_load_more_messages(data):
+    username = session.get('username')
+    if not username:
+        return
+
+    group_id = data.get('group_id')
+    offset = data.get('offset', 0)
+
+    if not isinstance(group_id, int) or not isinstance(offset, int):
+        emit('error', {'msg': '无效的群组 ID 或偏移量'})
+        return
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 检查用户是否属于该群组且不在黑名单
+    c.execute("""
+        SELECT role FROM group_members
+        WHERE group_id=? AND username=?
+    """, (group_id, username))
+    membership = c.fetchone()
+
+    if membership and group_id >= INITIAL_GROUP_ID and membership[0] != 'blacklist':
+        # 加载更多消息
+        c.execute("""
+            SELECT username, message, strftime('%Y-%m-%d %H:%M:%S', timestamp)
+            FROM messages
+            WHERE group_id=?
+            ORDER BY timestamp DESC
+            LIMIT 10 OFFSET ?
+        """, (group_id, offset))
+        messages = c.fetchall()
+        conn.close()
+
+        if messages:
+            emit('loaded_more_messages', {'count': len(messages)}, to=request.sid)
+            for message in reversed(messages):
+                timestamp = message[2]
+                emit('previous_message', {'msg': f"[{timestamp}] {message[0]}: {message[1]}"}, to=request.sid)
+        else:
+            emit('loaded_more_messages', {'count': 0}, to=request.sid)
+    else:
+        conn.close()
+        emit('error', {'msg': '你没有权限加载该群组的消息'})
+
+# SocketIO 事件：离开群组
+@socketio.on('leave')
+def handle_leave(data):
+    username = session.get('username')
+    if not username:
+        return
+
+    group_id = data.get('group_id')
+    if not isinstance(group_id, int):
+        emit('error', {'msg': '无效的群组 ID'})
+        return
+
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    # 检查用户是否属于该群组
+    c.execute("SELECT role FROM group_members WHERE group_id=? AND username=?", (group_id, username))
+    membership = c.fetchone()
+    conn.close()
+
+    if membership and group_id >= INITIAL_GROUP_ID and membership[0] != 'blacklist':
+        leave_room(str(group_id))
+        emit('message', {'msg': f'{username} 已离开群组'}, to=str(group_id))
+    else:
+        emit('error', {'msg': '你没有权限离开该群组'})
+
+# 运行应用
+if __name__ == '__main__':
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+
+
+===== 文件: ./templates/create_group.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>创建群组</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        form {
+            max-width: 400px;
+            margin: auto;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h1 style="text-align:center;">创建群组</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('create_group') }}" method="POST">
+        <label for="group_name">群组名：</label>
+        <input type="text" id="group_name" name="group_name" placeholder="输入群组名称" required>
+
+        <button type="submit">创建</button>
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./templates/index.html =====
+    <!DOCTYPE html>
+    <html>
+
+    <head>
+        <meta charset="UTF-8">
+        <title>主页</title>
+        <style>
+            footer {
+                background-color: #f8f9fa;
+                padding: 20px;
+                text-align: center;
+                box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            footer p {
+                margin: 0;
+                color: #6c757d;
+                font-size: 14px;
+            }
+
+            header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 15px 20px;
+                background-color: #ffffff;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .github-link {
+                display: flex;
+                align-items: center;
+                text-decoration: none;
+                color: #007BFF;
+                padding: 10px 15px;
+                border-radius: 5px;
+                font-weight: bold;
+                transition: background-color 0.3s ease;
+            }
+
+            .github-link img {
+                margin-right: 8px;
+            }
+
+            .github-link:hover {
+                background-color: #f0f0f0;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+            }
+
+            h1,
+            h2 {
+                text-align: center;
+                color: #333;
+            }
+
+            table {
+                width: 80%;
+                margin: 20px auto;
+                border-collapse: collapse;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
+
+            th,
+            td {
+                border: 1px solid #ddd;
+                padding: 12px 15px;
+                text-align: center;
+            }
+
+            th {
+                background-color: #f4f4f4;
+                color: #333;
+            }
+
+            tr:nth-child(even) {
+                background-color: #fafafa;
+            }
+
+            .actions a {
+                margin: 0 5px;
+                text-decoration: none;
+                color: #007BFF;
+                font-weight: bold;
+            }
+
+            .actions a:hover {
+                text-decoration: underline;
+            }
+
+            .buttons {
+                text-align: center;
+                margin: 20px;
+            }
+
+            .buttons a {
+                margin: 0 10px;
+                padding: 10px 20px;
+                background-color: #4CAF50;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+            }
+
+            .buttons a:hover {
+                background-color: #45a049;
+            }
+
+            .flash-message {
+                max-width: 500px;
+                margin: 20px auto;
+                background-color: #d4edda;
+                color: #155724;
+                padding: 15px;
+                border: 1px solid #c3e6cb;
+                border-radius: 5px;
+                text-align: center;
+            }
+        </style>
+    </head>
+
+    <body>
+        <header>
+            <nav class="navbar">
+                <div class="container">
+                    <!-- GitHub链接和其他导航链接居中 -->
+                    <div class="nav-links">
+                        <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                            <img width="18" src="/static/images/github.svg"
+                                alt="Github Logo">
+                            GitHub
+                        </a>
+                    </div>
+                </div>
+            </nav>
+        </header>
+        <h1>欢迎, {{ username }}</h1>
+
+        <!-- 显示 Flash 消息 -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="flash-message">
+            <ul>
+                {% for message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <h2>你的群组:</h2>
+        <table>
+            <tr>
+                <th>群号</th>
+                <th>群名</th>
+                <th>操作</th>
+            </tr>
+            {% for group in groups %}
+            <tr>
+                <td>{{ group[0] }}</td>
+                <td>{{ group[1] }}</td>
+                <td class="actions">
+                    <a href="{{ url_for('chat', group_id=group[0]) }}">进入群聊</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="buttons">
+            <a href="{{ url_for('create_group') }}">创建群组</a>
+            <a href="{{ url_for('join_group') }}">加入群组</a>
+            {% if session.is_admin %}
+            <a href="{{ url_for('admin') }}">管理员界面</a>
+            <a href="{{ url_for('server_status') }}">服务器状态</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}">退出</a>
+            <a href="{{ url_for('change_password') }}">修改密码</a>
+        </div>
+        <footer>
+            <div class="container">
+                <p>&copy; 2024 Kimi. All rights reserved.</p>
+            </div>
+        </footer>
+    </body>
+
+    </html>
+
+
+===== 文件: ./templates/admin.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>管理员面板</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        h2,
+        h3 {
+            color: #333;
+            text-align: center;
+        }
+
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        form {
+            display: inline-block;
+            width: 100%;
+        }
+
+        select,
+        input[type="text"],
+        input[type="number"] {
+            width: 90%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .flash-message {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h2>管理员面板</h2>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- 封禁用户 -->
+    <h3>封禁用户</h3>
+    <table>
+        <tr>
+            <th>选择用户名</th>
+            <th>操作</th>
+        </tr>
+        <tr>
+            <td>
+                <form method="post">
+                    <input type="hidden" name="action" value="ban">
+                    <select name="target_user" required>
+                        {% for user in users %}
+                        <option value="{{ user[0] }}">{{ user[0] }}</option>
+                        {% endfor %}
+                    </select>
+            </td>
+            <td>
+                <button type="submit">封禁用户</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+
+    <!-- 显示所有用户 -->
+    <h3>所有用户</h3>
+    <table>
+        <tr>
+            <th>用户名</th>
+            <th>状态</th>
+        </tr>
+        {% for user in admin %}
+        <tr>
+            <td>{{ user[0] }}</td>
+            <td>管理员</td>
+        </tr>
+        {% endfor %}
+        {% for user in users %}
+        <tr>
+            <td>{{ user[0] }}</td>
+            <td>普通用户</td>
+        </tr>
+        {% endfor %}
+        {% for user in baned %}
+        <tr>
+            <td>{{ user[0] }}</td>
+            <td>封禁用户</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <!-- 显示所有群组 -->
+    <h3>所有群组</h3>
+    <table>
+        <tr>
+            <th>群号</th>
+            <th>群名</th>
+        </tr>
+        {% for group in groups %}
+        <tr>
+            <td>{{ group[0] }}</td>
+            <td>{{ group[1] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+    <footer>
+    <div class="container">
+        <p>&copy; 2024 Kimi. All rights reserved.</p>
+    </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./templates/join_group.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>加入群组</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        form {
+            max-width: 400px;
+            margin: auto;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #007B9E;
+        }
+
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h1 style="text-align:center;">加入群组</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('join_group') }}" method="POST">
+        <label for="group_id">群号：</label>
+        <input type="number" id="group_id" name="group_id" placeholder="输入群号" required>
+
+        <button type="submit">加入</button>
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div><footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./templates/register.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>注册</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        form {
+            max-width: 300px;
+            margin: auto;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .flash-message {
+            max-width: 300px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body><header>
+    <nav class="navbar">
+        <div class="container">
+            <!-- GitHub链接和其他导航链接居中 -->
+            <div class="nav-links">
+                <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                    <img width="18" src="/static/images/github.svg"
+                        alt="Github Logo">
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+    </header>
+    <h1 style="text-align:center;">注册</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('register') }}" method="POST">
+        <label for="username">用户名：</label>
+        <input type="text" id="username" name="username" placeholder="输入用户名" required>
+
+        <label for="password">密码：</label>
+        <input type="password" id="password" name="password" placeholder="输入密码" required>
+
+        <button type="submit">注册</button>
+    </form>
+    <p style="text-align:center;">已有账号？<a href="{{ url_for('login') }}">登录</a></p>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer></body>
+
+</html>
+
+
+
+===== 文件: ./templates/login.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>登录</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #007BB5;
+        }
+
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+        }
+
+        .center {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body><header>
+    <nav class="navbar">
+        <div class="container">
+            <!-- GitHub链接和其他导航链接居中 -->
+            <div class="nav-links">
+                <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                    <img width="18" src="/static/images/github.svg"
+                        alt="Github Logo">
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+    </header>
+    <h1 class="center">登录</h1>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('login') }}" method="POST">
+        <label for="username">用户名：</label>
+        <input type="text" id="username" name="username" placeholder="请输入用户名" required>
+
+        <label for="password">密码：</label>
+        <input type="password" id="password" name="password" placeholder="请输入密码" required>
+
+        <button type="submit">登录</button>
+    </form>
+    <p class="center">没有账号？<a href="{{ url_for('register') }}">注册</a></p><footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./templates/change_password.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>修改密码</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .change-password-container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            width: 400px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        form label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        form input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        form button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        form button:hover {
+            background-color: #45a049;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .back-link a {
+            color: #007BFF;
+            text-decoration: none;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        .flash-message {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .flash-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        .flash-message.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border-color: #ffeeba;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="change-password-container">
+        <h2>修改密码</h2>
+
+        <!-- 显示 Flash 消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-message {% for category, message in messages %}{% if category == 'success' %}success{% elif category == 'danger' or category == 'warning' %}danger{% endif %}{% endfor %}">
+            <ul>
+                {% for category, message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('change_password') }}">
+            <label for="current_password">当前密码:</label>
+            <input type="password" id="current_password" name="current_password" required>
+
+            <label for="new_password">新密码:</label>
+            <input type="password" id="new_password" name="new_password" required>
+
+            <label for="confirm_password">确认新密码:</label>
+            <input type="password" id="confirm_password" name="confirm_password" required>
+
+            <button type="submit">提交</button>
+        </form>
+
+        <div class="back-link">
+            <a href="{{ url_for('index') }}">返回主页</a>
+        </div>
+    </div>
+</body>
+
+</html>
+
+
+
+===== 文件: ./templates/server_status.html =====
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>服务器状态</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        table {
+            width: 60%;
+            margin: 20px auto 40px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .flash-message {
+            width: 60%;
+            margin: 0 auto 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h1>服务器状态</h1>
+
+    <!-- 显示 Flash 消息（如果有） -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- 服务器状态表格 -->
+    <table>
+        <tr>
+            <th>项目</th>
+            <th>状态</th>
+        </tr>
+        <tr>
+            <td>运行时间</td>
+            <td>{{ uptime }}</td>
+        </tr>
+        <tr>
+            <td>内存使用</td>
+            <td>{{ memory }} MB</td>
+        </tr>
+        <tr>
+            <td>CPU 使用率</td>
+            <td>{{ cpu_usage }}%</td>
+        </tr>
+        <tr>
+            <td>磁盘空间</td>
+            <td>{{ disk_space }} GB</td>
+        </tr>
+    </table>
+
+    <!-- 返回管理员页面的链接 -->
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./templates/chat.html =====
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>群聊 - 群号: {{ group_id }}</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        h2,
+        h3 {
+            text-align: center;
+            color: #333;
+        }
+
+        #messages {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin: 20px auto;
+            width: 80%;
+            box-sizing: border-box;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #messages p {
+            margin: 5px 0;
+        }
+
+        #loadMoreBtn {
+            display: block;
+            width: 80%;
+            margin: 0 auto 10px auto;
+            padding: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        #loadMoreBtn:hover {
+            background-color: #0056b3;
+        }
+
+        #messageForm {
+            display: flex;
+            justify-content: center;
+            width: 80%;
+            margin: auto;
+        }
+
+        #messageForm input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+            outline: none;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        #messageForm input[type="submit"] {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 0 5px 5px 0;
+        }
+
+        #messageForm input[type="submit"]:hover {
+            background-color: #218838;
+        }
+
+        .flash-message {
+            max-width: 80%;
+            margin: 20px auto;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        .setting-btn {
+            display: block;
+            width: 80%;
+            margin: 20px auto;
+            padding: 10px;
+            background-color: #ffc107;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .setting-btn:hover {
+            background-color: #e0a800;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg" alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h2>群聊 - 群号: {{ group_id }}</h2>
+    {% if group_name %}
+    <h3>群名: {{ group_name }}</h3>
+    {% endif %}
+
+    {% if canedit %}
+    <button class="setting-btn" onclick="window.location.href='{{ url_for('group_settings', group_id=group_id) }}'">Go
+        to Setting</button>
+    {% endif %}
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <button id="loadMoreBtn">加载更多</button>
+    <div id="messages"></div>
+
+    <form id="messageForm">
+        <input type="text" id="message" autocomplete="off" placeholder="输入消息" required>
+        <input type="submit" value="发送">
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            var socket = io();
+            var group_id = {{ group_id }}; // Ensure group_id is a number. If it's a string, use quotes: "{{ group_id }}"
+
+            var messageOffset = 10;  // 已加载的消息数量
+
+            socket.emit('join', { 'group_id': group_id });
+
+            socket.on('loaded_messages', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = '已加载 ' + data.count + ' 条消息';
+                p.style.textAlign = 'center';
+                p.style.color = '#888';
+                messages.insertBefore(p, messages.firstChild);
+                if (data.count < 10) {
+                    document.getElementById('loadMoreBtn').style.display = 'none';
+                }
+            });
+
+            socket.on('previous_message', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = data.msg;
+                messages.insertBefore(p, messages.firstChild);
+            });
+
+            socket.on('loaded_more_messages', function (data) {
+                messageOffset += data.count;
+                if (data.count < 10) {
+                    document.getElementById('loadMoreBtn').style.display = 'none';
+                }
+            });
+
+            socket.on('message', function (data) {
+                var messages = document.getElementById('messages');
+                var p = document.createElement('p');
+                p.innerHTML = data.msg;
+                messages.appendChild(p);
+                messages.scrollTop = messages.scrollHeight;
+            });
+
+            document.getElementById('messageForm').onsubmit = function (e) {
+                e.preventDefault();
+                var msg = document.getElementById('message').value.trim();
+                if (msg !== "") {
+                    socket.emit('message', { 'group_id': group_id, 'msg': msg });
+                    document.getElementById('message').value = '';
+                }
+            };
+
+            document.getElementById('loadMoreBtn').onclick = function () {
+                socket.emit('load_more_messages', { 'group_id': group_id, 'offset': messageOffset });
+            };
+
+            window.onbeforeunload = function () {
+                socket.emit('leave', { 'group_id': group_id });
+            };
+        });
+    </script>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+
+===== 文件: ./templates/group_settings.html =====
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>管理员面板</title>
+    <style>
+        footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        footer p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #007BFF;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-link img {
+            margin-right: 8px;
+        }
+
+        .github-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        h2,
+        h3 {
+            color: #333;
+            text-align: center;
+        }
+
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        select,
+        input[type="text"],
+        input[type="number"] {
+            width: 90%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .flash-message {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 20px;
+        }
+
+        .back-link a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: bold;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        form {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- GitHub链接和其他导航链接居中 -->
+                <div class="nav-links">
+                    <a href="https://github.com/zjx-kimi/Chat" class="github-link">
+                        <img width="18" src="/static/images/github.svg"
+                            alt="Github Logo">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <h2> {{ group_id }} 群管理员面板</h2>
+
+    <!-- 显示 Flash 消息 -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-message">
+        <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- 添加成员到群组 -->
+    <h3>添加成员到群组</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="add_member">
+        <table>
+            <tr>
+                <th>选择用户</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for user in users %}
+                        <option value="{{ user[0] }}">{{ user[0] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">添加成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 从群组移除成员 -->
+    <h3>从群组移除成员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="remove_member">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members %}
+                        <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">移除成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+    <!-- 从群组移除成员并加入黑名单 -->
+    <h3>从群组移除成员并加入黑名单</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="insertblacklist">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members %}
+                        <option value="{{ member[1] }}">{{ member[1] }} ({{ member[2] }})</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">移除成员并加入黑名单</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 提升管理员 -->
+    <h3>提升管理员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="promote_admin">
+        <table>
+            <tr>
+                <th>选择成员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members if member[2] == 'member' %}
+                        <option value="{{ member[1] }}">{{ member[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">提升为管理员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <!-- 降级管理员 -->
+    <h3>降级管理员</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="demote_admin">
+        <table>
+            <tr>
+                <th>选择管理员</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>
+                    <select name="member" required>
+                        {% for member in members if member[2] == 'admin' %}
+                        <option value="{{ member[1] }}">{{ member[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button type="submit">降级为成员</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <div class="back-link">
+        <a href="{{ url_for('index') }}">返回主页</a>
+    </div>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Kimi. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
+
+
+===== 文件: ./collect_code_to_txt.sh =====
+#!/bin/bash
+
+# 定义要查找的代码文件扩展名
+EXTENSIONS=("py" "java" "c" "cpp" "js" "html" "ts" "rb" "go" "php" "swift" "kt" "rs" "sh" "pl" "sql")
+
+# 输出文件
+OUTPUT_FILE="project_code.txt"
+
+# 清空输出文件（如果已存在）
+> "$OUTPUT_FILE"
+
+# 定义要排除的目录（如 venv）
+EXCLUDE_DIRS=("venv" "__pycache__" ".git" "node_modules")  # 可根据需要添加更多要排除的目录
+
+# 开始构建 find 命令
+FIND_CMD=(find .)
+
+# 添加排除目录的参数
+for dir in "${EXCLUDE_DIRS[@]}"; do
+    FIND_CMD+=( -path "./$dir" -prune -o )
+done
+
+# 添加文件名匹配条件
+FIND_CMD+=( -type f \( )
+FIRST=true
+for ext in "${EXTENSIONS[@]}"; do
+    if [ "$FIRST" = true ]; then
+        FIND_CMD+=( -name "*.$ext" )
+        FIRST=false
+    else
+        FIND_CMD+=( -o -name "*.$ext" )
+    fi
+done
+FIND_CMD+=( \) -print )
+
+# 执行 find 命令并处理找到的文件
+"${FIND_CMD[@]}" | while read -r file; do
+    echo "===== 文件: $file =====" >> "$OUTPUT_FILE"
+    cat "$file" >> "$OUTPUT_FILE"
+    echo -e "\n\n" >> "$OUTPUT_FILE"
+done
+
+echo "所有代码文件（已排除指定目录）已合并到 ${OUTPUT_FILE}"
+
+
+
