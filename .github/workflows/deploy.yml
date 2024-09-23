@@ -42,7 +42,7 @@ jobs:
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
           # 启动 Cpolar 隧道并保存 URL
-          cpolar http 5000 > cpolar_tunnel_info.txt
+          nohup cpolar http 5000 > cpolar_tunnel_info.txt &
 
       # Step 6: 提取生成的 Cpolar URL 并更新到 README.md（覆盖原有内容）
       - name: Update README with Cpolar URL
