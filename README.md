@@ -39,4 +39,4 @@ cd ..
 pip install -r requirements.txt
 python app.py
 ```
-Application is live at: Tunnel URL: 
+Application is live at: https://472c24c9.r19.cpolar.top
