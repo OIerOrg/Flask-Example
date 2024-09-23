@@ -31,38 +31,35 @@ jobs:
         run: |
           nohup python app.py &
 
-      # Step 5: 安装 Cpolar 并启动免费隧道
-      - name: Install and run Cpolar
+      # Step 5: 安装 Cpolar
+      - name: Install Cpolar
         run: |
           wget https://www.cpolar.com/static/downloads/install-release-cpolar.sh
           chmod +x install-release-cpolar.sh
           sudo ./install-release-cpolar.sh
 
-          # 使用 GitHub Secrets 中的 Cpolar Token 来授权
-          cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
-
-          # 启动 Cpolar 隧道并保存日志
-          nohup cpolar http 5000 > cpolar_tunnel_log.txt 2>&1 &
-
-      # Step 6: 实时监控日志并提取 URL
-      - name: Monitor tunnel log for URL
+      # Step 6: 使用 GitHub Secrets 中的 Cpolar Token 来授权
+      - name: Set Cpolar authtoken
         run: |
-          {
-            tail -f cpolar_tunnel_log.txt | while read line; do
-              if [[ $line =~ (https://[a-z0-9]*\.cpolar\.top) ]]; then
-                echo "Tunnel URL: ${BASH_REMATCH[1]}"
-                # 将 URL 输出到文件
-                echo "${BASH_REMATCH[1]}" > tunnel_url.txt
-                break
-              fi
-            done
-          } &
+          sudo cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 等待一段时间后停止监控
-          sleep 30
-          kill $! # 停止 tail -f 进程
+      # Step 7: 启动 Cpolar 服务
+      - name: Start Cpolar service
+        run: |
+          sudo systemctl enable cpolar
+          sudo systemctl start cpolar
 
-      # Step 7: 更新 README.md 中的 Cpolar URL
+      # Step 8: 等待一段时间以确保 Cpolar 启动
+      - name: Wait for Cpolar to start
+        run: sleep 10
+
+      # Step 9: 提取 Cpolar URL
+      - name: Get Cpolar URL
+        run: |
+          TUNNEL_URL=$(grep -o 'https://[a-z0-9]*\.cpolar\.top' /var/log/cpolar/access.log | tail -n 1)
+          echo "Tunnel URL: $TUNNEL_URL" > tunnel_url.txt
+
+      # Step 10: 更新 README.md 中的 Cpolar URL
       - name: Update README with Cpolar URL
         run: |
           TUNNEL_URL=$(cat tunnel_url.txt)
@@ -73,7 +70,7 @@ jobs:
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
 
-      # Step 8: 提交更新后的 README.md 文件
+      # Step 11: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
