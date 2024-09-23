@@ -41,14 +41,17 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 启动 Cpolar 隧道并保存 URL
-          nohup cpolar http 5000 > cpolar_tunnel_info.txt &
+          # 启动 Cpolar 隧道
+          nohup cpolar http 5000 &
 
-      # Step 6: 提取生成的 Cpolar URL 并更新到 README.md（覆盖原有内容）
+      # Step 6: 使用 cpolar tunnels 获取 URL 并更新到 README.md（覆盖原有内容）
       - name: Update README with Cpolar URL
         run: |
-          # 提取 URL
-          TUNNEL_URL=$(grep -o 'https://[a-z0-9]*\.cpolar\.top' cpolar_tunnel_info.txt)
+          # 等待 Cpolar 隧道启动
+          sleep 5
+
+          # 使用 cpolar tunnels 命令获取隧道 URL
+          TUNNEL_URL=$(cpolar tunnels | grep -o 'https://[a-z0-9]*\.cpolar\.top')
 
           # 使用 sed 替换 README.md 中已有的 URL，保持文件结构不变
           if grep -q "Application is live at:" README.md; then
