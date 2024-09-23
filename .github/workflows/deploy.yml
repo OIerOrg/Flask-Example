@@ -42,9 +42,9 @@ jobs:
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
           # 使用固定域名（hostname）启动 Cpolar 隧道，指定端口 5000
-          cpolar http -hostname=chat.vip.cpolar.top 5000
+          cpolar http -hostname="http://chatonline.cpolar.io" 5000
 
       # Step 6: 确认服务已启动并访问固定域名
       - name: Verify Cpolar custom domain
         run: |
-          echo "Application is deployed at: https://chat.vip.cpolar.top/"
+          echo "Application is deployed at: http://chatonline.cpolar.io"
