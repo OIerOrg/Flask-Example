@@ -41,32 +41,38 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 启动 Cpolar 隧道
+          # 启动 Cpolar 隧道并保存日志
           nohup cpolar http 5000 > cpolar_tunnel_log.txt 2>&1 &
 
-      # Step 6: 等待 Cpolar 启动并提取 URL
-      - name: Extract Cpolar URL
+      # Step 6: 实时监控日志并提取 URL
+      - name: Monitor tunnel log for URL
         run: |
-          # 等待一段时间以确保 URL 被生成
-          sleep 5
+          {
+            tail -f cpolar_tunnel_log.txt | while read line; do
+              if [[ $line =~ (https://[a-z0-9]*\.cpolar\.top) ]]; then
+                echo "Tunnel URL: ${BASH_REMATCH[1]}"
+                # 将 URL 输出到文件
+                echo "${BASH_REMATCH[1]}" > tunnel_url.txt
+                break
+              fi
+            done
+          } &
 
-          # 提取 URL
-          TUNNEL_URL=$(grep -o 'https://[a-z0-9]*\.cpolar\.top' cpolar_tunnel_log.txt)
+          # 等待一段时间后停止监控
+          sleep 30
+          kill $! # 停止 tail -f 进程
 
-          if [ -z "$TUNNEL_URL" ]; then
-            echo "No URL found. Exiting."
-            exit 1
-          fi
-          echo "Tunnel URL: $TUNNEL_URL"
-
-      # Step 7: 更新 README.md 文件
+      # Step 7: 更新 README.md 中的 Cpolar URL
       - name: Update README with Cpolar URL
         run: |
+          TUNNEL_URL=$(cat tunnel_url.txt)
+
           if grep -q "Application is live at:" README.md; then
             sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
-          
+          fi
+
       # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
