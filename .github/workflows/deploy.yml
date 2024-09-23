@@ -60,6 +60,7 @@ jobs:
 
           # 等待一段时间后停止监控
           sleep 30
+          cat cpolar_tunnel_log.txt
           kill $! # 停止 tail -f 进程
 
       # Step 7: 更新 README.md 中的 Cpolar URL
