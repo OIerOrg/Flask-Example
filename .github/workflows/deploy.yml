@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x'
+          python-version: '3.8'  # 可根据需要指定具体版本
 
       # Step 3: 安装依赖
       - name: Install dependencies
@@ -31,8 +31,8 @@ jobs:
         run: |
           nohup python app.py &
 
-      # Step 5: 安装 Cpolar 并启动服务
-      - name: Install Cpolar
+      # Step 5: 安装 Cpolar 并启动免费隧道
+      - name: Install and run Cpolar
         run: |
           wget https://www.cpolar.com/static/downloads/install-release-cpolar.sh
           chmod +x install-release-cpolar.sh
@@ -41,37 +41,39 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 启动 Cpolar 服务
-          sudo systemctl start cpolar
-          sleep 5  # 等待 Cpolar 启动
+          # 启动 Cpolar 隧道并保存日志
+          nohup cpolar http -region=cn_top -log=stdout 5000 > cpolar_tunnel_log.txt 2>&1 &
 
-      # Step 6: 输出 Cpolar 服务状态以便调试
-      - name: Check Cpolar Status
+      # Step 6: 实时监控日志并提取 URL
+      - name: Monitor tunnel log for URL
         run: |
-          echo "Cpolar Status:"
-          sudo systemctl status cpolar
+          {
+            tail -f cpolar_tunnel_log.txt | while read line; do
+              if [[ $line =~ (https://[a-z0-9]*\.cpolar\.top) ]]; then
+                echo "Tunnel URL: ${BASH_REMATCH[1]}"
+                # 将 URL 输出到文件
+                echo "${BASH_REMATCH[1]}" > tunnel_url.txt
+                break
+              fi
+            done
+          } &
 
-      # Step 7: 提取生成的 Cpolar URL
-      - name: Extract Cpolar URL
-        run: |
-          TUNNEL_URL=$(sudo systemctl status cpolar | grep -o 'https://[a-z0-9]*\.cpolar\.top')
-          
-          if [ -z "$TUNNEL_URL" ]; then
-            echo "No URL found. Exiting."
-            exit 1
-          fi
-          echo "Tunnel URL: $TUNNEL_URL"
+          # 等待一段时间后停止监控
+          sleep 30
+          kill $! # 停止 tail -f 进程
 
-      # Step 8: 更新 README.md 文件
+      # Step 7: 更新 README.md 中的 Cpolar URL
       - name: Update README with Cpolar URL
         run: |
+          TUNNEL_URL=$(cat tunnel_url.txt)
+
           if grep -q "Application is live at:" README.md; then
             sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
 
-      # Step 9: 提交更新后的 README.md 文件
+      # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
@@ -79,8 +81,3 @@ jobs:
           git add README.md
           git commit -m "Update README with Cpolar URL"
           git push
-
-      # Step 10: 保持进程运行
-      - name: Keep process running
-        run: |
-          while true; do sleep 60; done
