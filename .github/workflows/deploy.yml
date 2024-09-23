@@ -78,3 +78,7 @@ jobs:
           git add README.md
           git commit -m "Update README with Cpolar URL"
           git push
+      - name: Wait for tunnel URL
+        run: |
+          echo "Waiting for 1 hour to ensure Cpolar tunnel URL is generated..."
+          sleep 3600  # 等待 1 小时
