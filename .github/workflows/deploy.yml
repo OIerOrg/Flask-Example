@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x'  # 指定你的 Python 版本
+          python-version: '3.x'
 
       # Step 3: 安装依赖
       - name: Install dependencies
@@ -31,8 +31,8 @@ jobs:
         run: |
           nohup python app.py &
 
-      # Step 5: 安装 Cpolar 并使用自定义域名启动服务
-      - name: Install and run Cpolar with custom domain
+      # Step 5: 安装 Cpolar 并启动免费隧道
+      - name: Install and run Cpolar
         run: |
           wget https://www.cpolar.com/static/downloads/install-release-cpolar.sh
           chmod +x install-release-cpolar.sh
@@ -41,10 +41,27 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 使用固定域名（hostname）启动 Cpolar 隧道，指定端口 5000
-          cpolar http -hostname="http://chatonline.cpolar.io" 5000
+          # 启动 Cpolar 隧道并保存 URL
+          cpolar http 5000 > cpolar_tunnel_info.txt
 
-      # Step 6: 确认服务已启动并访问固定域名
-      - name: Verify Cpolar custom domain
+      # Step 6: 提取生成的 Cpolar URL 并更新到 README.md（覆盖原有内容）
+      - name: Update README with Cpolar URL
         run: |
-          echo "Application is deployed at: http://chatonline.cpolar.io"
+          # 提取 URL
+          TUNNEL_URL=$(grep -o 'https://[a-z0-9]*\.cpolar\.top' cpolar_tunnel_info.txt)
+
+          # 使用 sed 替换 README.md 中已有的 URL，保持文件结构不变
+          if grep -q "Application is live at:" README.md; then
+            sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
+          else
+            echo "Application is live at: $TUNNEL_URL" >> README.md
+          fi
+
+      # Step 7: 提交更新后的 README.md 文件
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add README.md
+          git commit -m "Update README with Cpolar URL"
+          git push
