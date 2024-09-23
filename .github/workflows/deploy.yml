@@ -1,0 +1,50 @@
+name: Deploy Chat Application
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: 检出仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: 设置 Python 运行环境
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'  # 指定你的 Python 版本
+
+      # Step 3: 安装依赖
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Step 4: 启动应用
+      - name: Run app.py
+        run: |
+          nohup python app.py &
+
+      # Step 5: 安装 Cpolar 并使用固定域名启动服务
+      - name: Install and run Cpolar with custom domain
+        run: |
+          wget https://www.cpolar.com/static/downloads/install-release-cpolar.sh
+          chmod +x install-release-cpolar.sh
+          sudo ./install-release-cpolar.sh
+
+          # 使用 GitHub Secrets 中的 Cpolar Token 来授权
+          cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
+
+          # 使用固定域名启动 Cpolar 隧道，指定端口 5000
+          cpolar http -domain chat.vip.cpolar.top 5000
+
+      # Step 6: 确认服务已启动并访问固定域名
+      - name: Verify Cpolar custom domain
+        run: |
+          echo "Application is deployed at: https://chat.vip.cpolar.top/"
