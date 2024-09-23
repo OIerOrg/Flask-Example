@@ -59,13 +59,15 @@ jobs:
       # Step 7: 更新 README.md 中的 Cpolar URL
       - name: Update README with Cpolar URL
         run: |
-          TUNNEL_URL=$(cat tunnel_url.txt)
-
+          TUNNEL_URL=$(head -n 1 tunnel_url.txt)
+          
           if grep -q "Application is live at:" README.md; then
-            sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
+            sed -i "s#Application is live at: .*#Application is live at: $TUNNEL_URL#g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
+
+
 
       # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
