@@ -8,7 +8,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # 设置超时时间为 1 小时
 
     steps:
       # Step 1: 检出仓库代码
@@ -32,8 +31,8 @@ jobs:
         run: |
           nohup python app.py &
 
-      # Step 5: 安装 Cpolar 并启动免费隧道
-      - name: Install and run Cpolar
+      # Step 5: 安装 Cpolar 并启动服务
+      - name: Install Cpolar
         run: |
           wget https://www.cpolar.com/static/downloads/install-release-cpolar.sh
           chmod +x install-release-cpolar.sh
@@ -42,34 +41,37 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 启动 Cpolar 隧道
-          nohup cpolar http 5000 &
+          # 启动 Cpolar 服务
+          sudo systemctl start cpolar
+          sleep 5  # 等待 Cpolar 启动
 
-      # Step 6: 输出 Cpolar 状态以便调试
-      - name: Debug Cpolar Status
+      # Step 6: 输出 Cpolar 服务状态以便调试
+      - name: Check Cpolar Status
         run: |
           echo "Cpolar Status:"
           sudo systemctl status cpolar
 
-      # Step 7: 提取生成的 Cpolar URL 并更新到 README.md
-      - name: Update README with Cpolar URL
+      # Step 7: 提取生成的 Cpolar URL
+      - name: Extract Cpolar URL
         run: |
-          sleep 10  # 等待一段时间以确保 URL 被生成
-          # 从 systemctl status 中提取 URL
           TUNNEL_URL=$(sudo systemctl status cpolar | grep -o 'https://[a-z0-9]*\.cpolar\.top')
-
+          
           if [ -z "$TUNNEL_URL" ]; then
             echo "No URL found. Exiting."
             exit 1
           fi
           echo "Tunnel URL: $TUNNEL_URL"
+
+      # Step 8: 更新 README.md 文件
+      - name: Update README with Cpolar URL
+        run: |
           if grep -q "Application is live at:" README.md; then
             sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
 
-      # Step 8: 提交更新后的 README.md 文件
+      # Step 9: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
@@ -78,9 +80,7 @@ jobs:
           git commit -m "Update README with Cpolar URL"
           git push
 
-      # Step 9: 维持进程
-      - name: Keep Cpolar running
+      # Step 10: 保持进程运行
+      - name: Keep process running
         run: |
-          while true; do
-            sleep 60  # 每隔 60 秒检查一次
-          done
+          while true; do sleep 60; done
