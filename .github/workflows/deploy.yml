@@ -41,26 +41,29 @@ jobs:
           # 使用 GitHub Secrets 中的 Cpolar Token 来授权
           cpolar authtoken ${{ secrets.CPOLAR_TOKEN }}
 
-          # 启动 Cpolar 隧道
-          nohup cpolar http 5000 &
+          # 启动 Cpolar 隧道并保存日志
+          nohup cpolar http 5000 > cpolar_tunnel_log.txt 2>&1 &
 
-      # Step 6: 使用 cpolar tunnels 获取 URL 并更新到 README.md（覆盖原有内容）
+      # Step 6: 轮询获取 Cpolar 隧道 URL
+      - name: Extract Cpolar URL
+        run: |
+          while ! grep -o 'https://[a-z0-9]*\.cpolar\.top' cpolar_tunnel_log.txt; do
+            sleep 1
+          done
+
+          # 提取 URL
+          TUNNEL_URL=$(grep -o 'https://[a-z0-9]*\.cpolar\.top' cpolar_tunnel_log.txt)
+          echo "Tunnel URL: $TUNNEL_URL"
+
+      # Step 7: 更新 README.md 文件
       - name: Update README with Cpolar URL
         run: |
-          # 等待 Cpolar 隧道启动
-          sleep 5
-
-          # 使用 cpolar tunnels 命令获取隧道 URL
-          TUNNEL_URL=$(cpolar tunnels | grep -o 'https://[a-z0-9]*\.cpolar\.top')
-
-          # 使用 sed 替换 README.md 中已有的 URL，保持文件结构不变
           if grep -q "Application is live at:" README.md; then
             sed -i "s|Application is live at: .*|Application is live at: $TUNNEL_URL|g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
-          fi
-
-      # Step 7: 提交更新后的 README.md 文件
+          
+      # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
