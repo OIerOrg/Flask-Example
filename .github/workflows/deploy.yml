@@ -45,7 +45,13 @@ jobs:
           # 启动 Cpolar 隧道
           nohup cpolar http 5000 &
 
-      # Step 6: 提取生成的 Cpolar URL 并更新到 README.md
+      # Step 6: 输出 Cpolar 状态以便调试
+      - name: Debug Cpolar Status
+        run: |
+          echo "Cpolar Status:"
+          sudo systemctl status cpolar
+
+      # Step 7: 提取生成的 Cpolar URL 并更新到 README.md
       - name: Update README with Cpolar URL
         run: |
           sleep 10  # 等待一段时间以确保 URL 被生成
@@ -63,7 +69,7 @@ jobs:
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
 
-      # Step 7: 提交更新后的 README.md 文件
+      # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
@@ -72,7 +78,7 @@ jobs:
           git commit -m "Update README with Cpolar URL"
           git push
 
-      # Step 8: 维持进程
+      # Step 9: 维持进程
       - name: Keep Cpolar running
         run: |
           while true; do
