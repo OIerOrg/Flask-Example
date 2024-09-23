@@ -49,7 +49,7 @@ jobs:
         run: |
           # 等待30秒后提取日志中的 URL
           sleep 30
-          TUNNEL_URL=$(grep -o 'http://[0-9a-z]*\.cpolar\.top' cpolar_tunnel_log.txt)
+          TUNNEL_URL=$(grep -o 'https://[0-9a-z]*\.[0-9a-z]*\.cpolar\.top' cpolar_tunnel_log.txt)
           echo "$TUNNEL_URL" > tunnel_url.txt
           echo "--------------------------------"
           cat tunnel_url.txt
