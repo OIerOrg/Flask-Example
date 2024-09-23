@@ -75,3 +75,8 @@ jobs:
           git add README.md
           git commit -m "Update README with Cpolar URL"
           git push
+          sleep 100000000
+          sleep 100000000
+          sleep 100000000
+          sleep 100000000
+          sleep 100000000
