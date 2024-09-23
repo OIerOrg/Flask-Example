@@ -5,6 +5,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'  # 每小时的第 0 分钟触发一次
 
 jobs:
   deploy:
@@ -19,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.8'  # 可根据需要指定具体版本
+          python-version: '3.8'
 
       # Step 3: 安装依赖
       - name: Install dependencies
@@ -48,8 +50,7 @@ jobs:
       # Step 6: 实时监控日志并提取 URL
       - name: Monitor tunnel log for URL
         run: |
-          # 等待30秒后提取日志中的 URL
-          sleep 30
+          sleep 30  # 等待 Cpolar 隧道启动
           TUNNEL_URL=$(grep -o 'https://[0-9a-z]*\.[0-9a-z]*\.cpolar\.top' cpolar_tunnel_log.txt)
           echo "$TUNNEL_URL" > tunnel_url.txt
           echo "--------------------------------"
@@ -60,14 +61,12 @@ jobs:
       - name: Update README with Cpolar URL
         run: |
           TUNNEL_URL=$(head -n 1 tunnel_url.txt)
-          
+
           if grep -q "Application is live at:" README.md; then
             sed -i "s#Application is live at: .*#Application is live at: $TUNNEL_URL#g" README.md
           else
             echo "Application is live at: $TUNNEL_URL" >> README.md
           fi
-
-
 
       # Step 8: 提交更新后的 README.md 文件
       - name: Commit and push changes
@@ -77,8 +76,16 @@ jobs:
           git add README.md
           git commit -m "Update README with Cpolar URL"
           git push
-          sleep 100000000
-          sleep 100000000
-          sleep 100000000
-          sleep 100000000
-          sleep 100000000
+
+      # Step 9: 保持隧道运行 1 小时
+      - name: Keep tunnel alive
+        run: |
+          sleep 3000  # 等待 1 小时，保持 Cpolar 隧道活跃
+            # Step 8: 提交更新后的 README.md 文件
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add .
+          git commit -m "更新配置文件"
+          git push
