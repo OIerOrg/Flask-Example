@@ -47,23 +47,13 @@ jobs:
       # Step 6: 实时监控日志并提取 URL
       - name: Monitor tunnel log for URL
         run: |
-          {
-            tail -f cpolar_tunnel_log.txt | while read line; do
-              if [[ $line =~ (https://[a-z0-9]*\.cpolar\.top) ]]; then
-                echo "Tunnel URL: ${BASH_REMATCH[1]}"
-                # 将 URL 输出到文件
-                echo "${BASH_REMATCH[1]}" > tunnel_url.txt
-                break
-              fi
-            done
-          } &
-
-          # 等待一段时间后停止监控
+          # 等待30秒后提取日志中的 URL
           sleep 30
+          TUNNEL_URL=$(grep -o 'http://[0-9a-z]*\.cpolar\.top' cpolar_tunnel_log.txt)
+          echo "$TUNNEL_URL" > tunnel_url.txt
           echo "--------------------------------"
-          cat cpolar_tunnel_log.txt
+          cat tunnel_url.txt
           echo "--------------------------------"
-          kill $! # 停止 tail -f 进程
 
       # Step 7: 更新 README.md 中的 Cpolar URL
       - name: Update README with Cpolar URL
