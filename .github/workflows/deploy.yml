@@ -81,7 +81,7 @@ jobs:
       - name: Keep tunnel alive
         run: |
           sleep 3000  # 等待 1 小时，保持 Cpolar 隧道活跃
-            # Step 8: 提交更新后的 README.md 文件
+      # Step 10: 更新配置文件
       - name: Commit and push changes
         run: |
           git config --global user.name 'GitHub Actions'
