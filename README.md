@@ -42,4 +42,4 @@ pip install -r requirements.txt
 python app.py
 ```
 ## Dome
-Application is live at: https://72e9ab0f.r19.cpolar.top
+Application is live at: https://ea7206a.r19.cpolar.top
