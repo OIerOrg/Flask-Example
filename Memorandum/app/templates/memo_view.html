@@ -1,0 +1,49 @@
+<!-- templates/memo_view.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ memo.title }}{% endblock %}
+
+{% block head %}
+    <style>
+        #memo-content {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<h2>{{ memo.title }}</h2>
+<p>{{ memo.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+<div id="memo-content">
+    <!-- 这里将渲染备忘录内容 -->
+</div>
+<a href="{{ url_for('main.view_list', list_id=memo.list.id) }}" class="btn btn-secondary">返回列表</a>
+{% if memo.list.owner == current_user or memo.list in current_user.shared_lists %}
+    <a href="{{ url_for('main.edit_memo', memo_id=memo.id) }}" class="btn btn-primary">编辑</a>
+    <form method="post" action="{{ url_for('main.delete_memo', memo_id=memo.id) }}" style="display:inline;" onsubmit="return confirm('确定要删除这个备忘录吗？');">
+        {{ form.hidden_tag() }}
+        <button type="submit" class="btn btn-danger">删除</button>
+    </form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+    <!-- 引入 marked.js 和 DOMPurify -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var content = {{ memo.content|tojson|safe }};
+            if (content.trim() === '') {
+                document.getElementById('memo-content').innerHTML = '<p>内容为空。</p>';
+            } else {
+                var dirty = marked.parse(content);
+                var clean = DOMPurify.sanitize(dirty);
+                document.getElementById('memo-content').innerHTML = clean;
+            }
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,146 @@
+<!-- templates/memo_edit.html -->
+{% extends "base.html" %}
+
+{% block title %}编辑备忘录{% endblock %}
+
+{% block head %}
+    <!-- 引入 Bootstrap 的 CSS 文件 -->
+    <link rel="stylesheet" href="/static/bootstrap.min.css">
+
+    <!-- 编辑器和预览区域的样式 -->
+    <style>
+        #editor {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+        }
+        #preview {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        body { padding-top: 70px; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>编辑备忘录</h2>
+    <form method="post">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+            {{ form.title.label(class="form-label") }}
+            {{ form.title(class="form-control") }}
+        </div>
+        <!-- 隐藏的 textarea，用于提交内容 -->
+        {{ form.content(id="content", style="display:none;") }}
+        <div class="form-group">
+            <label>内容</label>
+            <!-- 使用 Bootstrap 的网格系统实现左右布局 -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div id="editor"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="preview">预览区域为空。</div> <!-- 默认占位符 -->
+                </div>
+            </div>
+        </div>
+        {{ form.submit(class="btn btn-primary") }}
+        <a href="{{ url_for('main.view_list', list_id=memo.list.id) }}" class="btn btn-secondary">返回</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <!-- 引入 marked.js 和 DOMPurify -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+
+    <!-- 引入 Monaco Editor 的加载器 -->
+    <script src="https://unpkg.com/monaco-editor@0.33.0/min/vs/loader.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 配置 Monaco Editor 的路径
+            require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.33.0/min/vs' } });
+
+            // 加载 Monaco Editor
+            require(['vs/editor/editor.main'], function () {
+                // 获取初始内容，确保是字符串
+                var initialContent = {{ memo.content | tojson | default('""') | safe }};
+                console.log('Initial Content:', initialContent);
+
+                // 创建 Monaco Editor 实例
+                var editor = monaco.editor.create(document.getElementById('editor'), {
+                    value: initialContent,
+                    language: 'markdown',
+                    theme: 'vs-light',
+                    automaticLayout: true
+                });
+
+                var preview = document.getElementById('preview');
+                console.log('Editor Element:', editor);
+                console.log('Preview Element:', preview);
+                console.log('Marked:', typeof marked !== 'undefined' ? 'Loaded' : 'Not Loaded'); // 检查 marked 是否已定义
+                console.log('DOMPurify:', typeof DOMPurify !== 'undefined' ? 'Loaded' : 'Not Loaded'); // 检查 DOMPurify 是否已定义
+
+                // 检查 marked.js 是否已加载
+                if (typeof marked === 'undefined') {
+                    console.error('marked.js 未正确加载。请检查 CDN 链接。');
+                    preview.innerHTML = '<p style="color: red;">预览失败，请检查 Markdown 语法。</p>';
+                    return;
+                }
+
+                // 检查 DOMPurify 是否已加载
+                if (typeof DOMPurify === 'undefined') {
+                    console.error('DOMPurify 未正确加载。请检查 CDN 链接。');
+                    preview.innerHTML = '<p style="color: red;">预览失败，请检查 Markdown 语法。</p>';
+                    return;
+                }
+
+                // 更新预览函数
+                function updatePreview() {
+                    try {
+                        var content = editor.getValue() || ''; // 确保 content 是字符串
+                        document.getElementById('content').value = content;
+
+                        if (content.trim() === '') {
+                            preview.innerHTML = '<p>预览区域为空。</p>'; // 显示默认占位符
+                            return;
+                        }
+
+                        var dirty = marked.parse(content); // 使用 marked.parse
+                        var clean = DOMPurify.sanitize(dirty);
+                        preview.innerHTML = clean;
+                    } catch (error) {
+                        console.error('Markdown 预览失败:', error);
+                        preview.innerHTML = '<p style="color: red;">预览失败，请检查 Markdown 语法。</p>';
+                    }
+                }
+
+                // 防抖函数
+                function debounce(func, wait) {
+                    let timeout;
+                    return function(...args) {
+                        clearTimeout(timeout);
+                        timeout = setTimeout(() => func.apply(this, args), wait);
+                    };
+                }
+
+                const debouncedUpdatePreview = debounce(updatePreview, 300);
+
+                // 绑定内容变化事件
+                editor.onDidChangeModelContent(function () {
+                    debouncedUpdatePreview();
+                });
+
+                // 初始化预览
+                updatePreview();
+            });
+        });
+    </script>
+{% endblock %}
