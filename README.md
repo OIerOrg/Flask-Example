@@ -1,5 +1,3 @@
-[![Deploy Chat Application](https://github.com/zjx-kimi/Chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/zjx-kimi/Chat/actions/workflows/deploy.yml)
-
 # 项目介绍
 
 本项目是一个基于 Python 构建的即时聊天应用，用户可以通过创建、加入群组进行实时聊天，同时管理员拥有管理用户和群组的功能。下文展示了项目部分功能的截图与简要说明。
