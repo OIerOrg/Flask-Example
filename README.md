@@ -4,3 +4,7 @@
 ![Version](https://img.shields.io/badge/version-12.6.8-orange)
 ![GitHub stars](https://img.shields.io/github/stars/OIerOrg/Flask-Example?style=social)  <!-- GitHub stars -->
 ![GitHub forks](https://img.shields.io/github/forks/OIerOrg/Flask-Example) <!-- GitHub forks -->
+
+---
+
+[Chat](Chat) [Memorandum](Memorandum)
